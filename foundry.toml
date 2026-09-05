@@ -1,12 +1,15 @@
 [profile.default]
 src = "src"
 test = "test"
+out = "out"
+libs = ["lib"]
 solc_version = "0.8.24"
 evm_version = "paris"
 optimizer = true
 optimizer_runs = 200
-ffi = false
-libs = []
+bytecode_hash = "none"
+cbor_metadata = false
 
 [profile.fork]
 test = "fork-tests"
+evm_version = "shanghai"
