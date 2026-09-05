@@ -1,0 +1,59 @@
+{
+  "branch": "flash/evm-verification-2026-09-05",
+  "commit": "ad6059d57efce7b777c644a578b9d102a34e2042",
+  "jobs": {
+    "pinned_arbitrum_fork": {
+      "aave_pool": "0x794a61358d6845594f94dc1db02a252b5b4814ad",
+      "asset": "WETH",
+      "asset_address": "0x82af49447d8a07e3bd95bd0d56f35241523fbab1",
+      "broadcast_to_arbitrum": false,
+      "conclusion": "success",
+      "expected_premium_wei": "5000000000000",
+      "expected_premium_weth": "0.000005",
+      "flash_loan_amount_wei": "10000000000000000",
+      "flash_loan_amount_weth": "0.01",
+      "fork_block_number": 501964988,
+      "job_id": 101343053436,
+      "local_chain_id": 31337,
+      "local_fork_host": "127.0.0.1",
+      "network": "Arbitrum One",
+      "premium_bps": 5,
+      "real_user_funds_used": false,
+      "repayment_observed": true,
+      "tests": {
+        "failed": 0,
+        "passed": 3
+      },
+      "upstream_rpc": "https://arb1.arbitrum.io/rpc"
+    },
+    "unit_and_local_anvil": {
+      "conclusion": "success",
+      "job_id": 101343053236,
+      "loopback_anvil": {
+        "chain_id": 31337,
+        "genesis_block_read": true,
+        "host": "127.0.0.1",
+        "started": true
+      },
+      "mock_tests": {
+        "failed": 0,
+        "passed": 11
+      },
+      "solidity_compilation": "pass"
+    }
+  },
+  "live_execution_allowed": false,
+  "meaning": "A real Foundry/Anvil EVM fork executed Aave V3 flashLoanSimple against pinned Arbitrum state and repaid principal plus premium inside the isolated fork. This is not a mainnet transaction and not income.",
+  "recorded_at": "2026-09-05T17:06:00Z",
+  "repository": "olehworkfree-hash/flash-bounty-lab",
+  "schema_version": 1,
+  "toolchain": {
+    "forge_commit": "fc096de8a548ea9f0b2c277f214e3d74d38b6995",
+    "fork_evm_version": "cancun",
+    "foundry": "1.8.1-stable",
+    "solc": "0.8.24"
+  },
+  "workflow": "FLASH EVM verification",
+  "workflow_conclusion": "success",
+  "workflow_run_id": 33979868258
+}

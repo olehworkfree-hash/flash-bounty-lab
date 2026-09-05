@@ -1,0 +1,43 @@
+{
+  "aave": {
+    "addresses_provider": "0xa97684ead0e402dc232d5a977953df7ecbab3cdb",
+    "flashloan_premium_total_bps": 5,
+    "pool": "0x794a61358d6845594f94dc1db02a252b5b4814ad"
+  },
+  "block_hash": "0xa7101e94d4712134085ef573b86644542a48ba98ccaa02c9ad2650dc9877fbaa",
+  "block_number": 502057680,
+  "block_number_hex": "0x1deccad0",
+  "chain_id": 42161,
+  "make_execution_id": "5254bd099528420cadf1d46f2671a64d",
+  "make_scenario_id": 7250161,
+  "network": "Arbitrum One",
+  "observed_at": "2026-09-05T16:59:26Z",
+  "parent_hash": "0xd1c9fa8dc7a0b0aa6c1df888fbf82817e35c393ae61ce0397c35aba8299dc88f",
+  "providers": {
+    "alchemy_public": {
+      "block_identity_match": true,
+      "pool_match": true,
+      "premium_match": true
+    },
+    "arbitrum_official": {
+      "block_identity_match": true,
+      "historical_state_call": "unavailable_at_this_height"
+    },
+    "nodeflare": {
+      "block_identity_match": true,
+      "pool_match": true,
+      "premium_match": true
+    }
+  },
+  "quorum": {
+    "accepted": true,
+    "block_identity": "3/3",
+    "protocol_state": "2/3"
+  },
+  "read_only": true,
+  "schema_version": 1,
+  "state_root": "0xc9c92346369c56923407de90fea9ea65e8013567f533f0287914933e6c09fc84",
+  "transaction_broadcast": false,
+  "transaction_signed": false,
+  "transactions_root": "0xc12174f52c005a2767ebcab22b3cba9cfa272356646c61ff4843efa536bdacae"
+}
