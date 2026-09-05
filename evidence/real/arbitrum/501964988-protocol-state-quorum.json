@@ -1,0 +1,40 @@
+{
+  "schema": "flash.real_protocol_state_quorum.v1",
+  "observed_at": "2026-09-05T10:09:37Z",
+  "network": "Arbitrum One",
+  "chain_id": 42161,
+  "block_number": 501964988,
+  "block_hash": "0xa411efdbe45b66ecedca59352fdbbccc81c1c2f1721935419e51e2cf31dfdf8e",
+  "eip1898": {"blockHash": "0xa411efdbe45b66ecedca59352fdbbccc81c1c2f1721935419e51e2cf31dfdf8e", "requireCanonical": true},
+  "aave_v3": {
+    "pool": "0x794a61358d6845594f94dc1db02a252b5b4814ad",
+    "flashloan_premium_total_bps": 5,
+    "selector": "0x074b2e43"
+  },
+  "tokens": {
+    "USDC": {"address": "0xaf88d065e77c8cc2239327c5edb3a432268e5831", "decimals": 6},
+    "WETH": {"address": "0x82af49447d8a07e3bd95bd0d56f35241523fbab1", "decimals": 18}
+  },
+  "uniswap_v2": {
+    "factory": "0xf1d7cc64fb4452f05c498126312ebe29f30fbcf9",
+    "router": "0x4752ba5dbc23f44d87826276bf6fd6b1c372ad24",
+    "pair_usdc_weth": "0xf64dfe17c8b87f012fcf50fbda1d62bfa148366a"
+  },
+  "sushiswap_v2": {
+    "factory": "0xc35dadb65012ec5796536bd9864ed8773abc74c4",
+    "router": "0x1b02da8cb0d097eb8d57a175b88c7d8b47997506",
+    "pair_usdc_weth": "0x57b85fef094e10b5eecdf350af688299e9553378"
+  },
+  "providers": [
+    {"name": "Arbitrum official public RPC", "http_status": 200, "identical_results": true},
+    {"name": "Nodeflare public Arbitrum RPC", "http_status": 200, "identical_results": true},
+    {"name": "Alchemy public Arbitrum RPC", "http_status": 200, "identical_results": true}
+  ],
+  "quorum": {"required": 2, "received": 3, "status": "PASS_3_OF_3"},
+  "provenance": {"system": "Make", "scenario_id": 7250267, "execution_id": "a8e51706e29448aa897c32cb0a4dcb46", "method": "eth_call"},
+  "normalized_state_sha256": "06ca60c587c707cfa152b8edd14536b5a9b017308656950e05520ca8210cee4d",
+  "read_only": true,
+  "transaction_signed": false,
+  "transaction_broadcast": false,
+  "realized_pnl": false
+}

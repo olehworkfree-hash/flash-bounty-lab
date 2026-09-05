@@ -1,0 +1,30 @@
+{
+  "schema": "flash.real_rpc_block_quorum.v1",
+  "observed_at": "2026-09-05T10:11:00Z",
+  "network": "Arbitrum One",
+  "chain_id": 42161,
+  "block_number": 501964988,
+  "block_number_hex": "0x1deb60bc",
+  "block_hash": "0xa411efdbe45b66ecedca59352fdbbccc81c1c2f1721935419e51e2cf31dfdf8e",
+  "parent_hash": "0xe15df8180ea15b353f0fd6bf5ab4a50a572a6070ef204bb75893d0a38b34da4c",
+  "state_root": "0x060979cae0ced0c164e8ec1ca098be1957622bd85eab8bda90510e01696e40e3",
+  "transactions_root": "0xcf6350f753f0c84caa0fc6ad756c9d076ef2a75bc5fe7188ede17bb4d95c41eb",
+  "receipts_root": "0x277cb01e928d6bf659de9bb64ce04143dc326db54601184b89bf21cd0a1eadac",
+  "timestamp": "2026-09-05T09:57:23Z",
+  "timestamp_hex": "0x6a9be783",
+  "base_fee_per_gas_wei": 20088000,
+  "gas_used_hex": "0x33011",
+  "l1_block_number_hex": "0x18b5c65",
+  "providers": [
+    {"name": "Arbitrum official public RPC", "endpoint": "https://arb1.arbitrum.io/rpc", "http_status": 200, "matched": true},
+    {"name": "Nodeflare public Arbitrum RPC", "endpoint": "https://rpc.nodeflare.app/arb/public", "http_status": 200, "matched": true},
+    {"name": "Alchemy public Arbitrum RPC", "endpoint": "https://arb-mainnet.g.alchemy.com/public", "http_status": 200, "matched": true}
+  ],
+  "quorum": {"required": 2, "received": 3, "identical_block_headers": true, "status": "PASS_3_OF_3"},
+  "provenance": {"system": "Make", "scenario_id": 7250161, "execution_id": "5edb129f09d640339c1b216c4e419fe2", "method": "eth_getBlockByNumber"},
+  "normalized_block_sha256": "24ec702879e4dbaa37a8fef22490495ee3fc0ec5b2c9b93105f0dfe69c77d54c",
+  "read_only": true,
+  "transaction_signed": false,
+  "transaction_broadcast": false,
+  "realized_pnl": false
+}

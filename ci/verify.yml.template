@@ -1,0 +1,43 @@
+name: FLASH EVM verification
+
+on:
+  push:
+    branches:
+      - flash/evm-verification-2026-09-05
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  unit-and-local-anvil:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Install Foundry v1.8.1
+        uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09
+        with:
+          version: v1.8.1
+      - run: forge --version && cast --version && anvil --version
+      - run: forge build --sizes
+      - run: forge test --match-contract FlashLoanProbeTest -vvv
+      - run: python3 scripts/anvil_smoke.py
+
+  pinned-arbitrum-fork:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Install Foundry v1.8.1
+        uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09
+        with:
+          version: v1.8.1
+      - name: Start pinned Arbitrum fork and run flash-loan repayment test
+        run: bash scripts/anvil_fork_smoke.sh
