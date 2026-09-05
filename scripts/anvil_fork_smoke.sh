@@ -34,6 +34,7 @@ for candidate in "${providers[@]}"; do
   anvil \
     --fork-url "$url" \
     --fork-block-number "$FORK_BLOCK" \
+    --hardfork shanghai \
     --chain-id 31337 \
     --host 127.0.0.1 \
     --port 8545 \
@@ -54,9 +55,7 @@ for candidate in "${providers[@]}"; do
     sleep 1
   done
 
-  if [[ "$ready" == "1" ]]; then
-    break
-  fi
+  if [[ "$ready" == "1" ]]; then break; fi
   kill "$ANVIL_PID" 2>/dev/null || true
   wait "$ANVIL_PID" 2>/dev/null || true
   ANVIL_PID=""
@@ -69,11 +68,15 @@ if [[ "$ready" != "1" ]]; then
 fi
 
 echo "Pinned Anvil fork is ready through provider label: $selected"
+echo "Checking local chain id"
 test "$(cast chain-id --rpc-url "$LOCAL_RPC")" = "31337"
+echo "Checking pinned block number"
 test "$(cast block-number --rpc-url "$LOCAL_RPC")" = "$FORK_BLOCK"
+echo "Checking Aave flash-loan premium"
 test "$(cast call --rpc-url "$LOCAL_RPC" "$AAVE_POOL" 'FLASHLOAN_PREMIUM_TOTAL()(uint128)')" = "5"
+echo "Checking Aave Pool runtime code"
 test "$(cast code --rpc-url "$LOCAL_RPC" "$AAVE_POOL")" != "0x"
-
+echo "Executing actual flashLoanSimple repayment on isolated fork"
 FOUNDRY_PROFILE=fork forge test --fork-url "$LOCAL_RPC" --match-contract AaveArbitrumForkTest -vvv
 
 mkdir -p evidence/real/anvil
@@ -84,6 +87,7 @@ cat > evidence/real/anvil/pinned-arbitrum-fork.json <<EOF
   "provider_label": "$selected",
   "fork_block": $FORK_BLOCK,
   "local_chain_id": 31337,
+  "anvil_hardfork": "shanghai",
   "aave_pool": "$AAVE_POOL",
   "flashloan_premium_total_bps": 5,
   "real_mainnet_broadcast": false,
