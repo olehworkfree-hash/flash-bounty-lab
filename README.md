@@ -1,31 +1,21 @@
-# FLASH Bounty Lab — public work sample
+# FLASH Bounty Lab
 
-Independent, AI-assisted documentation and reproducible local Python examples.
-This is not the private FLASH trading project, a deployed bot or an earnings report.
+Public portfolio for independent, AI-assisted technical documentation and reproducible Python examples.
 
-## Contents
+## Repository status - 2026-09-05
 
-- `flint_sample/`: four-gate synthetic inventory example, including CLI hardening.
-- `content/FLINT_THREAD_EN.txt`: six-post English draft for human review.
-- `evidence/`: actual local test logs and file integrity manifest.
+GitHub authentication and file creation have been verified through Make.
+The main branch currently contains this README only. Publication of the complete
+prepared sample has not finished. This repository is not yet a runnable package
+or a formal bounty submission.
 
-## Run
+## Prepared work
 
-Python 3.10 or newer, with no third-party dependencies:
+The separate local sample contains an offline Python example and 42 unit/CLI
+tests. All 42 passed locally on 2026-09-05. No GitHub Actions run is claimed.
+The code is not yet available on this branch.
 
-```sh
-cd flint_sample
-python -m unittest discover -v
-python readiness.py cold_start.json
-```
+## Boundaries
 
-42 local tests passed on 2026-09-05. No GitHub Actions run is claimed.
-The CLI makes no HTTP calls, uses no wallet, and never authorizes a trade.
-Read `flint_sample/README.md` and the publication review before reuse.
-
-## Publication boundaries
-
-No API keys, private keys, claim links, authentication requests or account exports
-belong in this repository. The fixtures and privacy-test markers are synthetic.
-This package may be shared for review. It contains no private FLASH work log.
-No endorsement, formal bounty submission, accepted job, prize or payment is implied.
+Do not upload credentials, private keys, account exports or private work logs.
+No deployment, trading, security finding, accepted order or payment is implied.
