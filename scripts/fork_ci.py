@@ -57,7 +57,7 @@ def main():
         if int(rpc(p, "eth_chainId", []), 16) != 42161: raise ValueError("WRONG_UPSTREAM_CHAIN")
         return int(rpc(p, "eth_blockNumber", []), 16)
     heads = concurrent(head)
-    block = min(heads.values()) - 32
+    block = min(heads.values()) - 256
     if block < 1: raise ValueError("INVALID_BLOCK")
     tag = hex(block)
     headers = concurrent(lambda p: rpc(p, "eth_getBlockByNumber", [tag, False]))

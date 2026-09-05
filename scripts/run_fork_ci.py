@@ -1,21 +1,12 @@
 #!/usr/bin/env python3
-"""Bounded read-only retry adapter. Does not weaken quorum or CI gates."""
+"""Bounded read-only retries. Strict 3/3 gate, no transaction broadcast."""
 import time
 import urllib.error
 import fork_ci
 
-# dRPC returned HTTP 500 for pinned eth_call in three bounded attempts.
-# Use the public endpoint documented by OnFinality, still requiring 3/3.
-# PublicNode remains the Anvil archive upstream. No private API keys.
-fork_ci.ENDPOINTS = {
-    'onfinality': 'https://arbitrum.api.onfinality.io/public',
-    'official': 'https://arb1.arbitrum.io/rpc',
-    'publicnode': 'https://arbitrum-one-rpc.publicnode.com',
-}
 original_rpc = fork_ci.rpc
 def retry_rpc(provider, method, params):
     for attempt in range(3):
-        if provider == 'onfinality': time.sleep(0.3)
         try:
             result = original_rpc(provider, method, params)
             if method == 'eth_getBlockByNumber':
@@ -25,9 +16,11 @@ def retry_rpc(provider, method, params):
             print('RPC_TRANSPORT_FAILURE provider=' + provider + ' method=' + method + ' http=' + str(exc.code) + ' attempt=' + str(attempt + 1), flush=True)
             if exc.code not in (429, 500, 502, 503, 504) or attempt == 2:
                 raise RuntimeError('RPC_UNAVAILABLE:' + provider + ':' + method + ':' + str(exc.code)) from None
-            time.sleep(2 * (attempt + 1))
-        except (TimeoutError, urllib.error.URLError) as exc:
-            print('RPC_NETWORK_FAILURE provider=' + provider + ' method=' + method + ' attempt=' + str(attempt + 1), flush=True)
+            retry_after = exc.headers.get('Retry-After', '')
+            wait = max(2 * (attempt + 1), int(retry_after)) if retry_after.isdigit() else 2 * (attempt + 1)
+            if wait > 30: raise RuntimeError('RPC_BACKOFF_EXCEEDS_BUDGET') from None
+            time.sleep(wait)
+        except (TimeoutError, urllib.error.URLError):
             if attempt == 2: raise RuntimeError('RPC_TIMEOUT:' + provider + ':' + method) from None
             time.sleep(2 * (attempt + 1))
 fork_ci.rpc = retry_rpc
