@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
-"""Exact-commit CI gate, three-provider read-only quorum and isolated Aave fork.
-No wallet keys, transaction signing or mainnet broadcast. Funds in Forge are simulated.
-"""
+"""Exact-commit CI gate, three-provider quorum and isolated Aave fork.
+No wallet keys, signing or mainnet broadcast. Forge funds are simulated."""
 import concurrent.futures as cf
 import hashlib
 import json
@@ -15,6 +14,7 @@ from anvil_smoke import free_port, local_rpc, wait_for_anvil
 
 REPO = "olehworkfree-hash/flash-bounty-lab"
 ENDPOINTS = {"drpc": "https://arbitrum.drpc.org/", "official": "https://arb1.arbitrum.io/rpc", "publicnode": "https://arbitrum-one-rpc.publicnode.com"}
+FORK_SOURCE = "publicnode"
 ADDRESSES = {"provider": "0xa97684ead0e402dC232d5A977953DF7ECBaB3CDb", "pool": "0x794a61358D6845594F94dc1DB02A252b5b4814aD", "weth": "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1"}
 METHODS = {"eth_chainId", "eth_blockNumber", "eth_getBlockByNumber", "eth_getCode", "eth_call"}
 HASH = re.compile(r"0x[0-9a-fA-F]{64}\Z")
@@ -77,24 +77,25 @@ def main():
         return {"code_sha256": codes, "pool_word": pool_word.lower(), "premium_bps": int(fee_word, 16)}
     states = concurrent(state)
     if len({json.dumps(s, sort_keys=True) for s in states.values()}) != 1: raise ValueError("PROTOCOL_STATE_CONFLICT")
-    agreed = headers["drpc"]
+    agreed = headers[FORK_SOURCE]
     evidence = {"block_number": block, "headers": {p: {k: h[k] for k in ("number", *keys)} for p, h in headers.items()}, "protocol_state": states, "observed_unix": time.time(), "quorum": "3_OF_3", "independent_operators_verified": False, "finality_verified": False}
     Path("evidence").mkdir(exist_ok=True)
     Path("evidence/fork-quorum.json").write_text(json.dumps(evidence, indent=2) + "\n")
     print("FORK_INPUT=" + json.dumps(evidence), flush=True)
+    print("ANVIL_UPSTREAM=" + FORK_SOURCE, flush=True)
     port = free_port()
-    proc = sp.Popen(["anvil", "--host", "127.0.0.1", "--port", str(port), "--chain-id", "31337", "--fork-url", ENDPOINTS["drpc"], "--fork-block-number", str(block), "--silent"], stdout=sp.DEVNULL, stderr=sp.DEVNULL)
+    proc = sp.Popen(["anvil", "--host", "127.0.0.1", "--port", str(port), "--chain-id", "31337", "--fork-url", ENDPOINTS[FORK_SOURCE], "--fork-block-number", str(block), "--silent"], stdout=sp.DEVNULL, stderr=sp.DEVNULL)
     try:
         version = wait_for_anvil(proc, port)
         actual = local_rpc(port, "eth_getBlockByNumber", [tag, False])
         if not actual or any(actual.get(k, "").lower() != agreed[k].lower() for k in keys): raise ValueError("LOCAL_FORK_HEADER_MISMATCH")
         for name, address in ADDRESSES.items():
-            if sha256code(local_rpc(port, "eth_getCode", [address, tag])) != states["drpc"]["code_sha256"][name]: raise ValueError("LOCAL_FORK_CODE_MISMATCH")
+            if sha256code(local_rpc(port, "eth_getCode", [address, tag])) != states[FORK_SOURCE]["code_sha256"][name]: raise ValueError("LOCAL_FORK_CODE_MISMATCH")
         result = sp.run(["forge", "test", "--fork-url", f"http://127.0.0.1:{port}", "--chain-id", "31337", "--match-contract", "AaveArbitrumForkTest", "-vvvv"], env=dict(os.environ, FOUNDRY_PROFILE="fork"), text=True, stdout=sp.PIPE, stderr=sp.STDOUT, timeout=180)
         Path("evidence/aave-fork-test.txt").write_text(result.stdout)
         print(result.stdout, flush=True)
         passed = result.returncode == 0 and "[PASS] testActualAaveWethRepaymentOnIsolatedFork()" in result.stdout and "1 passed; 0 failed; 0 skipped" in result.stdout
-        proof = {"status": "PASS_AAVE_FORK_ONLY" if passed else "FAIL_AAVE_FORK", "commit": sha, "run_id": run_id, "block": block, "block_hash": agreed["hash"], "anvil": version, "premium_bps": states["drpc"]["premium_bps"], "quorum": "3_OF_3_HEADER_AND_PROTOCOL_READS", "mainnet_broadcast": False, "real_funds": False, "profit_verified": False}
+        proof = {"status": "PASS_AAVE_FORK_ONLY" if passed else "FAIL_AAVE_FORK", "commit": sha, "run_id": run_id, "block": block, "block_hash": agreed["hash"], "anvil": version, "fork_source": FORK_SOURCE, "premium_bps": states[FORK_SOURCE]["premium_bps"], "quorum": "3_OF_3_HEADER_AND_PROTOCOL_READS", "mainnet_broadcast": False, "real_funds": False, "profit_verified": False}
         Path("evidence/aave-fork-result.json").write_text(json.dumps(proof, indent=2) + "\n")
         print("FORK_RESULT=" + json.dumps(proof), flush=True)
         with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as summary: summary.write("## Aave isolated fork result\n\n```json\n" + json.dumps(proof, indent=2) + "\n```\n")
