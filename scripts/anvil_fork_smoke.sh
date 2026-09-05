@@ -77,7 +77,7 @@ test "$(cast call --rpc-url "$LOCAL_RPC" "$AAVE_POOL" 'FLASHLOAN_PREMIUM_TOTAL()
 echo "Checking Aave Pool runtime code"
 test "$(cast code --rpc-url "$LOCAL_RPC" "$AAVE_POOL")" != "0x"
 echo "Executing actual flashLoanSimple repayment on isolated fork"
-FOUNDRY_PROFILE=fork forge test --fork-url "$LOCAL_RPC" --match-contract AaveArbitrumForkTest -vvv
+FOUNDRY_PROFILE=fork forge test --fork-url "$LOCAL_RPC" -vvvv | tee fork-tests.log
 
 mkdir -p evidence/real/anvil
 cat > evidence/real/anvil/pinned-arbitrum-fork.json <<EOF
