@@ -1,58 +1,43 @@
-name: FLASH EVM verification
-
+name: FLASH quorum Aave fork
 on:
   push:
-    branches:
-      - flash/evm-verification-2026-09-05
-  pull_request:
+    branches: [flash/quorum-aave-fork-2026-09-05]
   workflow_dispatch:
-
 permissions:
   contents: read
-
 concurrency:
-  group: flash-evm-$
+  group: flash-quorum-aave-isolated
   cancel-in-progress: true
-
 jobs:
-  unit-and-local-anvil:
+  verify:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
-      - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           persist-credentials: false
-      - name: Install Foundry v1.8.1
-        uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09
+      - uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09
         with:
           version: v1.8.1
-      - name: Record tool versions
-        run: forge --version && cast --version && anvil --version
-      - name: Compile Solidity
-        run: forge build --sizes
-      - name: Run mock EVM tests
-        run: forge test --match-contract FlashLoanProbeTest -vvv
-      - name: Start and verify a real loopback Anvil node
-        run: python3 scripts/anvil_smoke.py
-
-  pinned-arbitrum-fork:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 25
-    steps:
-      - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-        with:
-          persist-credentials: false
-      - name: Install Foundry v1.8.1
-        uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09
-        with:
-          version: v1.8.1
-      - name: Execute actual Aave flash-loan repayment on isolated pinned fork
-        env:
-          FORK_BLOCK: "501964988"
-        run: bash scripts/anvil_fork_smoke.sh
-      - name: Print fork diagnostics
-        if: always()
+      - name: Solidity compiler and mock EVM tests
         run: |
-          for log in anvil-fork-*.log; do echo "--- $log ---"; tail -200 "$log" || true; done
+          forge --version
+          anvil --version
+          forge build
+          forge test --match-contract FlashLoanProbeTest -vv
+      - name: Actual loopback Anvil smoke test (not a fork)
+        run: python3 scripts/anvil_smoke.py
+  fork:
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09
+        with:
+          version: v1.8.1
+          cache: false
+      - name: Fresh three-provider quorum and actual Aave Anvil fork
+        run: python3 scripts/fork_ci.py
