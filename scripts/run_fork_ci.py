@@ -4,9 +4,18 @@ import time
 import urllib.error
 import fork_ci
 
+# dRPC returned HTTP 500 for pinned eth_call in three bounded attempts.
+# Use the public endpoint documented by OnFinality, still requiring 3/3.
+# PublicNode remains the Anvil archive upstream. No private API keys.
+fork_ci.ENDPOINTS = {
+    'onfinality': 'https://arbitrum.api.onfinality.io/public',
+    'official': 'https://arb1.arbitrum.io/rpc',
+    'publicnode': 'https://arbitrum-one-rpc.publicnode.com',
+}
 original_rpc = fork_ci.rpc
 def retry_rpc(provider, method, params):
     for attempt in range(3):
+        if provider == 'onfinality': time.sleep(0.3)
         try:
             result = original_rpc(provider, method, params)
             if method == 'eth_getBlockByNumber':
