@@ -1,0 +1,6 @@
+{
+  "name": "FLASH verification - no wallet",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
+  "postCreateCommand": "bash scripts/install_foundry.sh",
+  "remoteEnv": {"PATH": "${containerEnv:PATH}:/home/vscode/.foundry/bin"}
+}

@@ -1,21 +1,35 @@
-# FLASH Bounty Lab
+# FLASH verification lab
 
-Public portfolio for independent, AI-assisted technical documentation and reproducible Python examples.
+New AI-assisted, non-production repayment probe, not the earlier private v0.7.0
+source archive or the separate Flint content sample. No earnings are claimed.
 
-## Repository status - 2026-09-05
+## Published core
 
-GitHub authentication and file creation have been verified through Make.
-The main branch currently contains this README only. Publication of the complete
-prepared sample has not finished. This repository is not yet a runnable package
-or a formal bounty submission.
+- src/FlashLoanProbe.sol: repayment receiver limited to chain ID 31337.
+- test/FlashLoanProbe.t.sol: 19 prepared mock Solidity tests.
+- fork-tests/AaveArbitrumFork.t.sol: isolated Aave Arbitrum repayment test.
+- scripts/anvil_smoke.py: starts and stops real loopback Anvil, no transactions.
+- foundry.toml: Solidity 0.8.24, Paris EVM.
 
-## Prepared work
+## Run
 
-The separate local sample contains an offline Python example and 42 unit/CLI
-tests. All 42 passed locally on 2026-09-05. No GitHub Actions run is claimed.
-The code is not yet available on this branch.
+With official Foundry installed:
 
-## Boundaries
+```sh
+forge build
+forge test --match-contract FlashLoanProbeTest -vv
+python3 scripts/anvil_smoke.py
+```
 
-Do not upload credentials, private keys, account exports or private work logs.
-No deployment, trading, security finding, accepted order or payment is implied.
+The fork test is separate from default tests. Do not treat default test success
+as evidence of an actual fork, mainnet execution or profit. A local chain ID is
+a guard, not node authentication. No production deployment path is included.
+
+## Status at publication
+
+The preparation container had no forge, solc or anvil. Solidity compilation,
+EVM tests and CI success are not claimed without corresponding actual run logs.
+A separate Python read-only evidence package passed 28 tests locally; those tests
+are not part of this initial core publication and do not execute an EVM.
+The complete new handoff archive is separate; this branch initially contains
+only the published core listed above. No wallet or private keys are used.
