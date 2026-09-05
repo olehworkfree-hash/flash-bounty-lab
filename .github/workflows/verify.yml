@@ -1,0 +1,29 @@
+name: FLASH verification
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: flash-verify-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09
+        with:
+          version: v1.8.1
+      - name: Solidity compiler and mock EVM tests
+        run: |
+          forge --version
+          anvil --version
+          forge build
+          forge test --match-contract FlashLoanProbeTest -vv
+      - name: Actual loopback Anvil smoke test (not a fork)
+        run: python3 scripts/anvil_smoke.py
