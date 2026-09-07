@@ -5,7 +5,7 @@ mkdir -p evidence/real/2026-09-07
 case "$mode" in
   swaps)
     block=501964988
-    match='AaveArbitrum(Fork|SwapFork)Test'
+    match='(AaveArbitrum(Fork|SwapFork)|ForkProfitExecutorFork)Test'
     ;;
   liquidation)
     python3 scripts/captured_archive.py --out evidence/real/2026-09-07/historical-quorum.json

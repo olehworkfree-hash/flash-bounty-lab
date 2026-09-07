@@ -1,13 +1,16 @@
-name: FLASH EVM verification
+name: FLASH profit guard and real market screen
 on:
   push:
-    branches: [flash/archive-retry-2026-09-07]
+    branches: [flash/profit-guard-2026-09-07]
   pull_request:
   workflow_dispatch:
 permissions:
   contents: read
+defaults:
+  run:
+    shell: bash
 concurrency:
-  group: flash-archive-retry-2026-09-07
+  group: flash-profit-guard-2026-09-07
   cancel-in-progress: true
 jobs:
   unit-and-local-anvil:
@@ -20,16 +23,23 @@ jobs:
       - uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09
         with:
           version: v1.8.1
-      - name: Record versions and compile Solidity
+      - name: Compile pinned Solidity and record tools
         run: |
           forge --version && cast --version && anvil --version
           forge build --sizes
-      - name: Unit tests before external experiments
+      - name: Unit and fuzz tests before all network experiments
         run: |
-          python3 scripts/test_real_quorum.py
-          python3 scripts/test_rpc_transport.py && python3 scripts/test_captured_archive.py
-          forge test --match-contract FlashLoanProbeTest -vvv
+          set -euo pipefail
+          mkdir -p evidence/real/2026-09-07
+          python3 -m unittest discover -s scripts -p 'test_*.py' -v
+          forge test -vvv | tee evidence/real/2026-09-07/unit-tests.log
           python3 scripts/anvil_smoke.py
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: profit-guard-unit-evidence
+          path: evidence/real/2026-09-07/unit-tests.log
+          retention-days: 7
   quorum-and-real-code-forks:
     needs: unit-and-local-anvil
     runs-on: ubuntu-24.04
@@ -41,13 +51,15 @@ jobs:
       - uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09
         with:
           version: v1.8.1
-      - name: Fresh read-only canonical RPC quorum
+      - name: Fresh canonical read-only RPC quorum
         run: python3 scripts/real_quorum.py --out evidence/real/2026-09-07/fresh-quorum.json
-      - name: Actual Aave and Sushi code on isolated fork
+      - name: Screen twelve real two-DEX quotes without signing
+        run: python3 scripts/market_screen.py --quorum evidence/real/2026-09-07/fresh-quorum.json --out evidence/real/2026-09-07/market-screen.json
+      - name: Actual Aave and Sushi swaps plus profit-only rejection tests
         run: bash scripts/run_real_validation.sh swaps
-      - name: Captured two-provider historical state and isolated liquidation
+      - name: Isolated captured-state historical liquidation
         run: bash scripts/run_real_validation.sh liquidation
-      - name: Archive tested source without credentials
+      - name: Archive exact tested source
         if: always()
         run: git archive --format=zip --output=flash-tested-source.zip HEAD
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
