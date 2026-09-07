@@ -46,3 +46,11 @@ def fetch_body(req, limit, *, opener=None, sleep=time.sleep):
             raise SafeTransportError('RPC_TRANSPORT_EXHAUSTED') from None
         sleep(delay)
     raise SafeTransportError('RPC_TRANSPORT_EXHAUSTED')
+
+
+def safe_urlopen(req, timeout=20):
+    """Context-manager adapter used by the original strict batch decoder."""
+    import io
+    if timeout != 20:
+        raise SafeTransportError('RPC_TIMEOUT_POLICY')
+    return io.BytesIO(fetch_body(req, 2 * 1024 * 1024))

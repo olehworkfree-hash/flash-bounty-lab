@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Bounded read-only Arbitrum observations. No keys, transaction signing or broadcast."""
-import argparse\nfrom head_policy import select_heads\nfrom rpc_transport import fetch_body, SafeTransportError
+import rpc_transport; import argparse; from head_policy import select_heads
 import collections
 import concurrent.futures
 import datetime as dt
@@ -16,7 +16,7 @@ PROVIDERS = {
     "alchemy-public": "https://arb-mainnet.g.alchemy.com/public",
     "nodeflare-public": "https://rpc.nodeflare.app/arb/public",
 }
-ALLOWED = {"eth_chainId", "eth_blockNumber", "eth_getBlockByNumber", "eth_getCode", "eth_call", "eth_getTransactionReceipt"}
+PROVIDERS['publicnode'] = 'https://arbitrum-one-rpc.publicnode.com'; ALLOWED = {"eth_chainId", "eth_blockNumber", "eth_getBlockByNumber", "eth_getCode", "eth_call", "eth_getTransactionReceipt"}
 POOL = "0x794a61358d6845594f94dc1db02a252b5b4814ad"
 DAI = "0xda10009cbd5d07dd0cecc66161fc93d7c9000da1"
 PAIR = "0x905dfcd5649217c42684f23958568e533c711aa3"
@@ -42,7 +42,7 @@ def request(label, calls):
                for i, (method, params) in enumerate(calls, 1)]
     req = urllib.request.Request(PROVIDERS[label], data=canonical(payload).encode(),
                                  headers={"Content-Type": "application/json", "User-Agent": "FLASH-read-only-validation/1"})
-    with urllib.request.urlopen(req, timeout=20) as reply:
+    with rpc_transport.safe_urlopen(req, timeout=20) as reply:
         body = reply.read(LIMIT + 1)
     if len(body) > LIMIT:
         raise ValueError("RPC_RESPONSE_TOO_LARGE")
