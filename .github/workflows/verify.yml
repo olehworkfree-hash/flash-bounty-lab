@@ -1,13 +1,13 @@
 name: FLASH EVM verification
 on:
   push:
-    branches: [main, flash/evm-verification-2026-09-05]
+    branches: [main, flash/evm-verification-2026-09-05, flash/real-validation-2026-09-07]
   pull_request:
   workflow_dispatch:
 permissions:
   contents: read
 concurrency:
-  group: flash-evm-verification
+  group: flash-real-validation-2026-09-07
   cancel-in-progress: true
 jobs:
   unit-and-local-anvil:
@@ -20,15 +20,16 @@ jobs:
       - uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09
         with:
           version: v1.8.1
-      - name: Record tool versions
-        run: forge --version && cast --version && anvil --version
-      - name: Compile Solidity
-        run: forge build --sizes
-      - name: Run mock EVM tests
-        run: forge test --match-contract FlashLoanProbeTest -vvv
-      - name: Verify local Anvil
-        run: python3 scripts/anvil_smoke.py
-  pinned-arbitrum-fork:
+      - name: Record versions and compile Solidity
+        run: |
+          forge --version && cast --version && anvil --version
+          forge build --sizes
+      - name: Unit tests before external experiments
+        run: |
+          python3 scripts/test_real_quorum.py
+          forge test --match-contract FlashLoanProbeTest -vvv
+          python3 scripts/anvil_smoke.py
+  quorum-and-real-code-forks:
     needs: unit-and-local-anvil
     runs-on: ubuntu-24.04
     timeout-minutes: 25
@@ -39,17 +40,21 @@ jobs:
       - uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09
         with:
           version: v1.8.1
-      - name: Aave plus actual AMM code on isolated fork
-        env:
-          FORK_BLOCK: '501964988'
-        run: bash scripts/anvil_fork_smoke.sh
+      - name: Fresh read-only canonical RPC quorum
+        run: python3 scripts/real_quorum.py --out evidence/real/2026-09-07/fresh-quorum.json
+      - name: Actual Aave and Sushi code on isolated fork
+        run: bash scripts/run_real_validation.sh swaps
+      - name: Historical liquidation pre-state and recorded next-block timestamp
+        run: bash scripts/run_real_validation.sh liquidation
+      - name: Archive tested source without credentials
+        if: always()
+        run: git archive --format=zip --output=flash-tested-source.zip HEAD
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
-          name: isolated-fork-evidence
+          name: real-validation-evidence
           path: |
-            fork-tests.log
-            evidence/real/anvil/*.json
-            anvil-fork-*.log
+            evidence/real/2026-09-07/
+            flash-tested-source.zip
           retention-days: 7
           if-no-files-found: warn
