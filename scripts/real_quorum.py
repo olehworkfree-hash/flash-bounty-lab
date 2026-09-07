@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Bounded read-only Arbitrum observations. No keys, transaction signing or broadcast."""
-import argparse
+import argparse; from head_policy import select_heads
 import collections
 import concurrent.futures
 import datetime as dt
@@ -156,9 +156,9 @@ def main():
         heads, head_errors = parallel(head, PROVIDERS)
         if len(heads) < 2:
             raise ValueError("HEAD_QUORUM_UNAVAILABLE")
-        number = PRE_BLOCK if args.historical else min(heads.values()) - 32
+        selected = heads if args.historical else select_heads(heads); evidence['quarantined_head_labels'] = sorted(set(heads) - set(selected)); number = PRE_BLOCK if args.historical else min(selected.values()) - 32
         evidence.update(heads=heads, head_errors=head_errors, block_number=number, confirmation_policy="32 L2 blocks; not L1 finality")
-        headers, errors = parallel(lambda label: header(label, number), heads)
+        headers, errors = parallel(lambda label: header(label, number), selected)
         h, voters = agreement(headers)
         if args.historical and h["hash"] != PRE_HASH:
             raise ValueError("HISTORICAL_HASH_MISMATCH")
