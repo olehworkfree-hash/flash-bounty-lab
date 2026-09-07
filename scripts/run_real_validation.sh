@@ -40,7 +40,7 @@ done
 [[ "$(cast block-number --rpc-url "$local_rpc")" == "$block" ]]
 if [[ "$mode" == liquidation ]]; then
   cast block "$block" --rpc-url "$local_rpc" --json > evidence/real/2026-09-07/local-pinned-header.json
-  python3 -c 'import json; a=json.load(open("evidence/real/2026-09-07/local-pinned-header.json")); b=json.load(open("evidence/real/2026-09-07/historical-quorum.json")); assert a["hash"].lower()==b["header"]["hash"]'
+  python3 scripts/pinned_header.py evidence/real/2026-09-07/local-pinned-header.json evidence/real/2026-09-07/historical-quorum.json
 fi
 FOUNDRY_PROFILE=fork forge test --fork-url "$local_rpc" --match-contract "$match" -vvvv | tee "evidence/real/2026-09-07/${mode}-tests.log"
 # This file is written only after Forge exits successfully, with pipefail enabled.
