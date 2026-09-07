@@ -27,7 +27,7 @@ jobs:
       - name: Unit tests before external experiments
         run: |
           python3 scripts/test_real_quorum.py
-          python3 scripts/test_rpc_transport.py
+          python3 scripts/test_rpc_transport.py && python3 scripts/test_captured_archive.py
           forge test --match-contract FlashLoanProbeTest -vvv
           python3 scripts/anvil_smoke.py
   quorum-and-real-code-forks:
@@ -45,7 +45,7 @@ jobs:
         run: python3 scripts/real_quorum.py --out evidence/real/2026-09-07/fresh-quorum.json
       - name: Actual Aave and Sushi code on isolated fork
         run: bash scripts/run_real_validation.sh swaps
-      - name: Historical liquidation pre-state and recorded next-block timestamp
+      - name: Captured two-provider historical state and isolated liquidation
         run: bash scripts/run_real_validation.sh liquidation
       - name: Archive tested source without credentials
         if: always()

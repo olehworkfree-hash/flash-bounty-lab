@@ -8,7 +8,7 @@ case "$mode" in
     match='AaveArbitrum(Fork|SwapFork)Test'
     ;;
   liquidation)
-    python3 scripts/real_quorum.py --historical --out evidence/real/2026-09-07/historical-quorum.json
+    python3 scripts/captured_archive.py --out evidence/real/2026-09-07/historical-quorum.json
     export LIQUIDATION_TIMESTAMP
     LIQUIDATION_TIMESTAMP="$(python3 -c 'import json; print(json.load(open("evidence/real/2026-09-07/historical-quorum.json"))["recorded_event"]["timestamp"])')"
     block=501873950
