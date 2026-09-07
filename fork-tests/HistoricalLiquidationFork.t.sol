@@ -11,11 +11,12 @@ contract HistoricalLiquidationForkTest {
     address constant POOL = 0x794a61358D6845594F94dc1DB02A252b5b4814aD;
     address constant DAI = 0xDA10009cBd5D07dd0CeCc66161FC93D7c9000da1;
     address constant BORROWER = address(bytes20(hex"a7c1ffdd40705b56785b31d48ff355e7b6f0336d"));
-    uint256 constant PRE_BLOCK = 501873950;
     event HistoricalLiquidationResult(uint256 healthBefore, uint256 healthAtRecordedTime, uint256 borrowedDai, uint256 premiumDai, uint256 forkSurplusDai, uint256 remainingDebtBase);
 
     function _fixture() private returns (ForkLiquidationProbe p) {
-        require(block.chainid == 31337 && block.number == PRE_BLOCK, "WRONG_FORK");
+        // RPC L2 height/hash were verified before Forge. Solidity NUMBER uses the L1 header field.
+        uint256 expectedNumber = vm.envUint("PRE_EVM_BLOCK");
+        require(block.chainid == 31337 && expectedNumber > 0 && block.number == expectedNumber, "WRONG_EVM_FORK_ENVIRONMENT");
         p = new ForkLiquidationProbe(POOL, DAI);
         require(ILiquidationToken(DAI).balanceOf(address(p)) == 0, "PROBE_MUST_START_EMPTY");
     }
@@ -32,10 +33,12 @@ contract HistoricalLiquidationForkTest {
         (,,,,,uint256 beforeHealth) = ILiquidationPool(POOL).getUserAccountData(BORROWER);
         uint256 recordedTimestamp = vm.envUint("LIQUIDATION_TIMESTAMP");
         require(recordedTimestamp > block.timestamp && recordedTimestamp <= block.timestamp + 60, "UNBOUNDED_TIME_CHANGE");
-        // Use the real liquidation block's verified time. No price, balance or storage mocking.
-        // This is a pre-state experiment, NOT a full replay of all transactions in that block.
+        // Recorded block environment only. No price, balance or storage mocking.
+        // This is a pre-state experiment, not replay of intervening transactions.
         vm.warp(recordedTimestamp);
-        vm.roll(PRE_BLOCK + 1);
+        uint256 recordedL1Number = vm.envUint("LIQUIDATION_EVM_BLOCK");
+        require(recordedL1Number >= block.number && recordedL1Number <= block.number + 1, "UNBOUNDED_L1_BLOCK_CHANGE");
+        vm.roll(recordedL1Number);
         (,,,,,uint256 health) = ILiquidationPool(POOL).getUserAccountData(BORROWER);
         require(health < 1 ether, "POSITION_NOT_LIQUIDATABLE_AT_RECORDED_TIME");
         p.run(BORROWER, 1);

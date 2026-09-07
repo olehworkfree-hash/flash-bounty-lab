@@ -9,8 +9,10 @@ case "$mode" in
     ;;
   liquidation)
     python3 scripts/real_quorum.py --historical --out evidence/real/2026-09-07/historical-quorum.json
-    export LIQUIDATION_TIMESTAMP
+    export LIQUIDATION_TIMESTAMP PRE_EVM_BLOCK LIQUIDATION_EVM_BLOCK
     LIQUIDATION_TIMESTAMP="$(python3 -c 'import json; print(json.load(open("evidence/real/2026-09-07/historical-quorum.json"))["recorded_event"]["timestamp"])')"
+    PRE_EVM_BLOCK="$(python3 -c 'import json; print(int(json.load(open("evidence/real/2026-09-07/historical-quorum.json"))["header"]["l1BlockNumber"],16))')"
+    LIQUIDATION_EVM_BLOCK="$(python3 -c 'import json; print(int(json.load(open("evidence/real/2026-09-07/historical-quorum.json"))["recorded_event"]["header"]["l1BlockNumber"],16))')"
     block=501873950
     match=HistoricalLiquidationForkTest
     ;;
@@ -43,7 +45,7 @@ if [[ "$mode" == liquidation ]]; then
   python3 scripts/pinned_header.py evidence/real/2026-09-07/local-pinned-header.json evidence/real/2026-09-07/historical-quorum.json
 fi
 FOUNDRY_PROFILE=fork forge test --fork-url "$local_rpc" --match-contract "$match" -vvvv | tee "evidence/real/2026-09-07/${mode}-tests.log"
-# This file is written only after Forge exits successfully, with pipefail enabled.
+# Written only after Forge succeeds, with pipefail enabled.
 python3 - "$mode" "$block" "$label" <<'PY'
 import json, os, sys
 from pathlib import Path

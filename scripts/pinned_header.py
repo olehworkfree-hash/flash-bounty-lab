@@ -3,7 +3,6 @@ import json
 from pathlib import Path
 import sys
 
-
 def checked_header(document: dict, evidence: dict) -> dict:
     if not isinstance(document, dict) or evidence.get('status') != 'PASS':
         raise ValueError('INVALID_HEADER_EVIDENCE')
@@ -13,12 +12,11 @@ def checked_header(document: dict, evidence: dict) -> dict:
         document = document.get('data')
     if not isinstance(document, dict):
         raise ValueError('MISSING_CAST_HEADER_DATA')
-    for key in ('hash', 'parentHash', 'stateRoot', 'number', 'timestamp'):
+    for key in ('hash', 'parentHash', 'stateRoot', 'number', 'timestamp', 'l1BlockNumber'):
         seen, expected = document.get(key), evidence['header'].get(key)
         if not isinstance(seen, str) or not isinstance(expected, str) or seen.lower() != expected.lower():
             raise ValueError('LOCAL_FORK_HEADER_MISMATCH_' + key)
     return document
-
 
 if __name__ == '__main__':
     if len(sys.argv) != 3:

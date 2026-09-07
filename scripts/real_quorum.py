@@ -93,7 +93,7 @@ def header(label, number):
     if chain != "0xa4b1" or not h or int(h["number"], 16) != number:
         raise ValueError("CHAIN_OR_BLOCK_MISMATCH")
     keys = ("number", "hash", "parentHash", "stateRoot", "timestamp")
-    result = {key: h[key].lower() for key in keys}
+    keys = keys + ('l1BlockNumber',); result = {key: h[key].lower() for key in keys}
     if any(len(result[key]) != 66 for key in ("hash", "parentHash", "stateRoot")):
         raise ValueError("INVALID_BLOCK_HASH")
     return result

@@ -3,7 +3,7 @@ from pinned_header import checked_header
 
 class PinnedHeaderTest(unittest.TestCase):
     def setUp(self):
-        self.h = dict(hash='0x11', parentHash='0x22', stateRoot='0x33', number='0x64', timestamp='0x99')
+        self.h = dict(hash='0x11', parentHash='0x22', stateRoot='0x33', number='0x64', timestamp='0x99', l1BlockNumber='0x44')
         self.e = dict(status='PASS', header=self.h)
     def test_plain_header(self):
         self.assertEqual(checked_header(self.h, self.e), self.h)
