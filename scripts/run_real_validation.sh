@@ -40,10 +40,27 @@ done
 [[ "$(cast block-number --rpc-url "$local_rpc")" == "$block" ]]
 if [[ "$mode" == liquidation ]]; then
   cast block "$block" --rpc-url "$local_rpc" --json > evidence/real/2026-09-07/local-pinned-header.json
-  python3 -c 'import json; a=json.load(open("evidence/real/2026-09-07/local-pinned-header.json")); b=json.load(open("evidence/real/2026-09-07/historical-quorum.json")); assert a["hash"].lower()==b["header"]["hash"]'
+  python3 - <<'PY'
+import json
+from pathlib import Path
+root = Path('evidence/real/2026-09-07')
+a = json.loads((root / 'local-pinned-header.json').read_text())
+b = json.loads((root / 'historical-quorum.json').read_text())
+# Foundry 1.8.1 emits a versioned success/data envelope, not a raw header.
+# Validate the observed shape without weakening the block-identity gate.
+assert type(a.get('schema_version')) is int and a['schema_version'] == 1, 'CAST_SCHEMA'
+assert a.get('success') is True and a.get('errors') == [], 'CAST_FAILURE'
+assert isinstance(a.get('data'), dict), 'CAST_HEADER_MISSING'
+h = a['data']
+for field in ('hash', 'parentHash', 'stateRoot'):
+    assert h[field].lower() == b['header'][field], 'FORK_HEADER_MISMATCH_' + field
+assert int(h['number'], 16) == b['block_number'], 'FORK_NUMBER_MISMATCH'
+assert int(h['timestamp'], 16) == int(b['header']['timestamp'], 16), 'FORK_TIME_MISMATCH'
+print('LOCAL_FORK_HEADER_MATCHES_TWO_PROVIDER_CAPTURE')
+PY
 fi
 FOUNDRY_PROFILE=fork forge test --fork-url "$local_rpc" --match-contract "$match" -vvvv | tee "evidence/real/2026-09-07/${mode}-tests.log"
-# This file is written only after Forge exits successfully, with pipefail enabled.
+# Written only after Forge exits successfully; pipefail remains enabled.
 python3 - "$mode" "$block" "$label" <<'PY'
 import json, os, sys
 from pathlib import Path
