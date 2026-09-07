@@ -9,7 +9,7 @@ import json
 import os
 from pathlib import Path
 import time
-import urllib.request
+import urllib.request; from rpc_retry import bounded_urlopen
 
 PROVIDERS = {
     "arbitrum-official": "https://arb1.arbitrum.io/rpc",
@@ -42,7 +42,7 @@ def request(label, calls):
                for i, (method, params) in enumerate(calls, 1)]
     req = urllib.request.Request(PROVIDERS[label], data=canonical(payload).encode(),
                                  headers={"Content-Type": "application/json", "User-Agent": "FLASH-read-only-validation/1"})
-    with urllib.request.urlopen(req, timeout=20) as reply:
+    with bounded_urlopen(req, timeout=20) as reply:
         body = reply.read(LIMIT + 1)
     if len(body) > LIMIT:
         raise ValueError("RPC_RESPONSE_TOO_LARGE")
@@ -154,9 +154,9 @@ def main():
                 raise ValueError("WRONG_CHAIN")
             return int(n, 16)
         heads, head_errors = parallel(head, PROVIDERS)
-        if len(heads) < 2:
+        if len(heads) < 2 and not args.historical:
             raise ValueError("HEAD_QUORUM_UNAVAILABLE")
-        selected = heads if args.historical else select_heads(heads); evidence['quarantined_head_labels'] = sorted(set(heads) - set(selected)); number = PRE_BLOCK if args.historical else min(selected.values()) - 32
+        selected = PROVIDERS if args.historical else select_heads(heads); evidence['quarantined_head_labels'] = sorted(set(heads) - set(selected)); number = PRE_BLOCK if args.historical else min(selected.values()) - 32
         evidence.update(heads=heads, head_errors=head_errors, block_number=number, confirmation_policy="32 L2 blocks; not L1 finality")
         headers, errors = parallel(lambda label: header(label, number), selected)
         h, voters = agreement(headers)

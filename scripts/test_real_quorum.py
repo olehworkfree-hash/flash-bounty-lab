@@ -1,4 +1,5 @@
 import unittest
+from test_rpc_retry import RpcRetryTest
 from test_head_policy import HeadPolicyTest
 from real_quorum import agreement, request, digest
 
