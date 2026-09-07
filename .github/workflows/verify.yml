@@ -1,13 +1,13 @@
 name: FLASH EVM verification
 on:
   push:
-    branches: [main, flash/evm-verification-2026-09-05, flash/real-validation-2026-09-07]
+    branches: [flash/archive-retry-2026-09-07]
   pull_request:
   workflow_dispatch:
 permissions:
   contents: read
 concurrency:
-  group: flash-real-validation-2026-09-07
+  group: flash-archive-retry-2026-09-07
   cancel-in-progress: true
 jobs:
   unit-and-local-anvil:
@@ -27,6 +27,7 @@ jobs:
       - name: Unit tests before external experiments
         run: |
           python3 scripts/test_real_quorum.py
+          python3 scripts/test_rpc_transport.py
           forge test --match-contract FlashLoanProbeTest -vvv
           python3 scripts/anvil_smoke.py
   quorum-and-real-code-forks:

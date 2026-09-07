@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Bounded read-only Arbitrum observations. No keys, transaction signing or broadcast."""
-import argparse; from head_policy import select_heads
+import argparse\nfrom head_policy import select_heads\nfrom rpc_transport import fetch_body, SafeTransportError
 import collections
 import concurrent.futures
 import datetime as dt
