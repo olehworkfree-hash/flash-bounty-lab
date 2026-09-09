@@ -1,7 +1,7 @@
-name: FLASH atomic Aave V3 and bounded session
+name: FLASH triangle screen and matched atomic fork
 on:
   push:
-    branches: [flash/atomic-v3-2026-09-09]
+    branches: [flash/triangle-match-2026-09-09]
   workflow_dispatch:
 permissions:
   contents: read
@@ -9,7 +9,7 @@ defaults:
   run:
     shell: bash
 concurrency:
-  group: flash-atomic-v3-2026-09-09
+  group: flash-triangle-match-2026-09-09
   cancel-in-progress: true
 jobs:
   unit-before-network:
@@ -22,23 +22,23 @@ jobs:
       - uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09
         with:
           version: v1.8.1
-      - name: Compile and test before all network experiments
+      - name: Compile both profiles and run all unit tests
         run: |
           set -euo pipefail
-          mkdir -p evidence/real/2026-09-09
-          (forge --version; anvil --version; cast --version) | tee evidence/real/2026-09-09/tools.txt
+          mkdir -p evidence/triangle
+          (forge --version; anvil --version; cast --version) | tee evidence/triangle/tools.txt
           forge build --sizes
           FOUNDRY_PROFILE=fork forge build --sizes
-          python3 -m unittest discover -s scripts -p 'test_*.py' -v 2>&1 | tee evidence/real/2026-09-09/python-tests.log
-          forge test -vvv | tee evidence/real/2026-09-09/unit-tests.log
+          python3 -m unittest discover -s scripts -p 'test_*.py' -v 2>&1 | tee evidence/triangle/python-tests.log
+          forge test -vvv | tee evidence/triangle/unit-tests.log
           python3 scripts/anvil_smoke.py
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
-          name: atomic-v3-unit-evidence
-          path: evidence/real/2026-09-09/
+          name: triangle-unit-evidence
+          path: evidence/triangle/
           retention-days: 7
-  real-screen-and-fork:
+  real-screen-and-matched-fork:
     needs: unit-before-network
     runs-on: ubuntu-24.04
     timeout-minutes: 25
@@ -49,26 +49,28 @@ jobs:
       - uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09
         with:
           version: v1.8.1
-      - name: Three bounded observations with new quorum each round
-        run: python3 scripts/session_screen.py --out-dir evidence/real/2026-09-09/session --rounds 3
-      - name: Aave flash loan and V3 swaps in one guarded local operation
-        run: python3 scripts/run_v3_atomic.py --quorum evidence/real/2026-09-09/session/round-3/quorum.json --out-dir evidence/real/2026-09-09
-      - name: Independent V3 quote versus actual swap regression
-        run: python3 scripts/run_v3_fork.py --quorum evidence/real/2026-09-09/session/round-3/quorum.json --out-dir evidence/real/2026-09-09
-      - name: Regression - Aave flash loans and V2 profit rejection
+      - name: Real current quorum
+        run: python3 scripts/real_quorum.py --out evidence/triangle/quorum.json
+      - name: Three-hop screen - at most 512 quotes per source
+        run: python3 scripts/triangle_screen.py --quorum evidence/triangle/quorum.json --out evidence/triangle/screen.json
+      - name: Match exact selected routes, sizes and pools on local Anvil
+        run: python3 scripts/run_triangle_fork.py --quorum evidence/triangle/quorum.json --screen evidence/triangle/screen.json --out-dir evidence/triangle/matched
+      - name: Regression - prior two-hop V3 atomic integration
+        run: python3 scripts/run_v3_atomic.py --quorum evidence/triangle/quorum.json --out-dir evidence/triangle/regression
+      - name: Regression - previous V2 swaps and profit rejection
         run: bash scripts/run_real_validation.sh swaps
-      - name: Regression - captured historical liquidation
+      - name: Regression - historical liquidation
         run: bash scripts/run_real_validation.sh liquidation
       - name: Exact source archive
         if: always()
-        run: git archive --format=zip --output=flash-atomic-tested-source.zip HEAD
+        run: git archive --format=zip --output=flash-triangle-source.zip HEAD
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
-          name: atomic-v3-real-evidence
+          name: triangle-real-evidence
           path: |
-            evidence/real/2026-09-09/
+            evidence/triangle/
             evidence/real/2026-09-07/
-            flash-atomic-tested-source.zip
+            flash-triangle-source.zip
           retention-days: 7
           if-no-files-found: error
