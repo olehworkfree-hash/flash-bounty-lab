@@ -1,7 +1,7 @@
-name: FLASH accounting audit and isolated forks
+name: FLASH bounded provider deadlines and checkpoints
 on:
   push:
-    branches: [flash/accounting-audit-2026-09-09]
+    branches: [flash/provider-deadlines-2026-09-09]
   workflow_dispatch:
 permissions:
   contents: read
@@ -9,7 +9,7 @@ defaults:
   run:
     shell: bash
 concurrency:
-  group: flash-accounting-audit-2026-09-09
+  group: flash-provider-deadlines-2026-09-09
   cancel-in-progress: true
 jobs:
   unit-before-network:
@@ -35,7 +35,7 @@ jobs:
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
-          name: atomic-v3-unit-evidence
+          name: deadline-unit-evidence
           path: evidence/real/2026-09-09/
           retention-days: 7
   real-screen-and-fork:
@@ -61,14 +61,14 @@ jobs:
         run: bash scripts/run_real_validation.sh liquidation
       - name: Exact source archive
         if: always()
-        run: git archive --format=zip --output=flash-atomic-tested-source.zip HEAD
+        run: git archive --format=zip --output=flash-deadline-tested-source.zip HEAD
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
-          name: atomic-v3-real-evidence
+          name: deadline-network-evidence
           path: |
             evidence/real/2026-09-09/
             evidence/real/2026-09-07/
-            flash-atomic-tested-source.zip
+            flash-deadline-tested-source.zip
           retention-days: 7
           if-no-files-found: error

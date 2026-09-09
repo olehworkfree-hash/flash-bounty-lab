@@ -6,12 +6,39 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import signal
 import sys
 import time
 from real_quorum import digest
 from screen_integrity import audit_screen
 
 MAX_ROUNDS = 3
+
+
+def run_stage(script, extra, logpath, timeout):
+    """Supervise a process group; preserve the specific failing stage in the report."""
+    with logpath.open('w') as log:
+        proc = subprocess.Popen([sys.executable, '-u', str(Path(__file__).with_name(script)), *extra],
+                                stdout=log, stderr=subprocess.STDOUT,
+                                start_new_session=(os.name == 'posix'))
+        try:
+            return proc.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            if os.name == 'posix':
+                os.killpg(proc.pid, signal.SIGTERM)
+            else:
+                proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                if os.name == 'posix':
+                    os.killpg(proc.pid, signal.SIGKILL)
+                else:
+                    proc.kill()
+                proc.wait(timeout=3)
+            raise
+
+
 
 
 def checked(document, field='sha256'):
@@ -77,22 +104,25 @@ def main():
         for i in range(args.rounds):
             if (args.out_dir/'STOP').exists():
                 raise ValueError('STOP_REQUESTED')
-            root=args.out_dir/f'round-{i+1}'; root.mkdir(exist_ok=True)
+            root=args.out_dir/f'round-{i+1}'; root.mkdir(exist_ok=False)
             qpath,spath=root/'quorum.json',root/'screen.json'
             for script,extra in [('real_quorum.py',['--out',str(qpath)]),
-                                 ('v3_market_screen.py',['--quorum',str(qpath),'--out',str(spath)])]:
-                with (root/(script+'.log')).open('w') as log:
-                    result=subprocess.run([sys.executable,str(Path(__file__).with_name(script)),*extra],
-                        stdout=log,stderr=subprocess.STDOUT,timeout=240)
-                if result.returncode:
-                    raise ValueError('CHILD_CHECK_FAILED')
+                                 ('bounded_screen.py',['--quorum',str(qpath),'--out',str(spath)])]:
+                report.update(active_round=i+1, active_stage=script)
+                # Heartbeat survives abrupt runner cancellation or an external timeout.
+                from bounded_screen import atomic_json
+                atomic_json(args.out_dir/'progress.json', report)
+                limit = 150 if script == 'bounded_screen.py' else 240
+                code = run_stage(script, extra, root/(script+'.log'), limit)
+                if code:
+                    raise ValueError('STAGE_FAILED_' + script.replace('.py','').upper())
             samples.append((json.loads(qpath.read_text()),json.loads(spath.read_text())))
             summarize(samples)  # Stop on conflicting metadata immediately.
             if i+1<args.rounds:
                 time.sleep(4)
         report=summarize(samples)
     except Exception as exc:
-        report.update(failure_type=type(exc).__name__,failure_code=str(exc) if isinstance(exc,ValueError) else 'SESSION_FAILED')
+        report.update(failure_type=type(exc).__name__,failure_code=str(exc) if isinstance(exc,ValueError) else ('STAGE_TIMEOUT' if isinstance(exc,subprocess.TimeoutExpired) else 'SESSION_FAILED'))
     report.update(completed_rounds=len(samples),source_commit=os.getenv('GITHUB_SHA'),run_id=os.getenv('GITHUB_RUN_ID'),
         finished_at=dt.datetime.now(dt.timezone.utc).isoformat())
     report['sha256']=digest(report)
