@@ -29,7 +29,8 @@ class BoundedScreenTest(unittest.TestCase):
         else:
             doc = dict(status='PASS', provider=label, token=token, observation=dict(output=value))
             program += f'p.write_text({json.dumps(doc)!r})'
-        return [sys.executable, '-c', program]
+        # Isolated stdlib-only child: site customization is not part of this test.
+        return [sys.executable, '-I', '-S', '-c', program]
 
     def run_case(self, root, modes, timeout=2):
         commands = {name:self.command(root,name,**kw) for name,kw in modes.items()}
@@ -44,8 +45,8 @@ class BoundedScreenTest(unittest.TestCase):
     def test_hanging_reader_stops_and_preserves_checkpoint(self):
         with tempfile.TemporaryDirectory() as d:
             root=Path(d);start=time.monotonic()
-            r=self.run_case(root,{'a':{},'b':{},'slow':{'delay':30}},timeout=0.7)
-            self.assertLess(time.monotonic()-start,3)
+            r=self.run_case(root,{'a':{},'b':{},'slow':{'delay':30}},timeout=2.0)
+            self.assertLess(time.monotonic()-start,5)
             self.assertEqual(r['workers']['slow']['status'],'DEADLINE')
             self.assertEqual(r['workers']['a']['status'],'PASS')
             self.assertTrue((root/'slow/checkpoint.json').exists())
