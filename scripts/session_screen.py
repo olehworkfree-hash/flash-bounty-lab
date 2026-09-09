@@ -9,6 +9,7 @@ import subprocess
 import sys
 import time
 from real_quorum import digest
+from screen_integrity import audit_screen
 
 MAX_ROUNDS = 3
 
@@ -31,6 +32,7 @@ def summarize(samples):
     for quorum, screen in samples:
         q = checked(quorum, 'evidence_sha256')
         s = checked(screen)
+        audit_screen(q, s)  # Recompute economics; a checksum alone cannot validate it.
         if q.get('historical') is not False or s.get('execution_allowed') is not False:
             raise ValueError('RESEARCH_POLICY')
         if s.get('realized_pnl') != '0':

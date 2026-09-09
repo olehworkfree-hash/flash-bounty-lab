@@ -4,15 +4,7 @@ from session_screen import checked, summarize
 from real_quorum import digest
 
 
-def fixture(number=100,gross=-1):
-    header=dict(number=hex(number),hash='0x'+format(number,'064x'),timestamp=hex(1000+number))
-    q=dict(status='PASS',historical=False,block_number=number,header=header,state_voters=['arbitrum-official','publicnode'])
-    q['evidence_sha256']=digest(q)
-    s=dict(status='PASS',execution_allowed=False,realized_pnl='0',voters=q['state_voters'],quorum_sha256=q['evidence_sha256'],
-        header=header,block_number=number,rows_requested=1,successful_quotes=1,positive_before_gas=int(gross>0),
-        observations=dict(quote_rows=[dict(gross_before_gas_wei=str(gross))]))
-    s['sha256']=digest(s)
-    return q,s
+from test_screen_integrity import fixture
 
 
 def seal(s):
@@ -26,7 +18,7 @@ class SessionTest(unittest.TestCase):
         self.assertEqual(r['realized_pnl'],'0'); self.assertFalse(r['execution_allowed'])
     def test_positive_quote_not_executable(self):
         r=summarize([fixture(gross=42)])
-        self.assertEqual(r['positive_quote_evaluations'],1);self.assertFalse(r['all_candidates_fork_verified'])
+        self.assertEqual(r['positive_quote_evaluations'],8);self.assertFalse(r['all_candidates_fork_verified'])
     def test_duplicate_rejected(self):
         with self.assertRaises(ValueError):summarize([fixture(),fixture()])
     def test_reverse_order_rejected(self):

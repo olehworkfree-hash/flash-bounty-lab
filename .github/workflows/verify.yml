@@ -1,7 +1,7 @@
-name: FLASH atomic Aave V3 and bounded session
+name: FLASH accounting audit and isolated forks
 on:
   push:
-    branches: [flash/atomic-v3-2026-09-09]
+    branches: [flash/accounting-audit-2026-09-09]
   workflow_dispatch:
 permissions:
   contents: read
@@ -9,7 +9,7 @@ defaults:
   run:
     shell: bash
 concurrency:
-  group: flash-atomic-v3-2026-09-09
+  group: flash-accounting-audit-2026-09-09
   cancel-in-progress: true
 jobs:
   unit-before-network:
