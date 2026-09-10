@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.24;
+import {V3PathDecoder} from "../src/V3PathDecoder.sol";
 interface TriangleVm { function deal(address,uint256) external; function envBytes(string calldata) external returns(bytes memory); function envUint(string calldata) external returns(uint256); }
 interface TriangleToken { function deposit() external payable; function approve(address,uint256) external returns(bool); function balanceOf(address) external view returns(uint256); function allowance(address,address) external view returns(uint256); }
 interface TriangleFactory { function getPool(address,address,uint24) external view returns(address); }
@@ -20,8 +21,9 @@ abstract contract TriangleAddresses {
  address constant QUOTER=address(bytes20(hex'61ffe014ba17989e743c5f6cb21bf9697530b21e'));
  address constant ROUTER=address(bytes20(hex'e592427a0aece92de3edee1f18e0157c05861564'));
  address constant AAVE=address(bytes20(hex'794a61358d6845594f94dc1db02a252b5b4814ad'));
- function tokenAt(bytes memory path,uint256 index) internal pure returns(address a) { uint256 offset=index*23; assembly { a:=shr(96,mload(add(add(path,32),offset))) } }
- function feeAt(bytes memory path,uint256 index) internal pure returns(uint24 f) { uint256 offset=index*23+20; assembly { f:=shr(232,mload(add(add(path,32),offset))) } }
+ // Bounded high-level decoding permits compiler memory spilling without claiming unsafe mload is safe.
+ function tokenAt(bytes memory path,uint256 index) internal pure returns(address) { return V3PathDecoder.tokenAt(path,index); }
+ function feeAt(bytes memory path,uint256 index) internal pure returns(uint24) { return V3PathDecoder.feeAt(path,index); }
  function validatePath(bytes memory path) internal view {
   require(block.chainid==31337 && path.length==89,'LOCAL_CYCLE_ONLY');
   require(tokenAt(path,0)==WETH && tokenAt(path,3)==WETH,'ENDPOINTS');

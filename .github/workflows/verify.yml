@@ -1,7 +1,7 @@
-name: FLASH triangular V3 screening and atomic fork
+name: FLASH triangle compilation repair and real fork
 on:
   push:
-    branches: [flash/triangular-v3-2026-09-10]
+    branches: [flash/triangle-compile-fix-2026-09-10]
   workflow_dispatch:
 permissions:
   contents: read
@@ -9,7 +9,7 @@ defaults:
   run:
     shell: bash
 concurrency:
-  group: flash-triangular-v3-2026-09-10
+  group: flash-triangle-compile-fix-2026-09-10
   cancel-in-progress: true
 jobs:
   unit-before-network:
@@ -22,21 +22,26 @@ jobs:
       - uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09
         with:
           version: v1.8.1
-      - name: Compile and test before network experiments
+      - name: Compile both profiles and run all offline tests
         run: |
           set -euo pipefail
           mkdir -p evidence/real/2026-09-10
           (forge --version; anvil --version; cast --version) | tee evidence/real/2026-09-10/tools.txt
-          forge build --sizes
-          FOUNDRY_PROFILE=fork forge build --sizes
+          forge build --sizes 2>&1 | tee evidence/real/2026-09-10/default-build.log
+          FOUNDRY_PROFILE=fork forge build --sizes 2>&1 | tee evidence/real/2026-09-10/fork-build.log
           python3 -m unittest discover -s scripts -p 'test_*.py' -v 2>&1 | tee evidence/real/2026-09-10/python-tests.log
-          forge test -vvv | tee evidence/real/2026-09-10/unit-tests.log
+          forge test -vvv 2>&1 | tee evidence/real/2026-09-10/unit-tests.log
           python3 scripts/anvil_smoke.py
+      - name: Preserve exact source even if a gate fails
+        if: always()
+        run: git archive --format=zip --output=flash-triangle-tested-source.zip HEAD
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
           name: triangle-unit-evidence
-          path: evidence/real/2026-09-10/
+          path: |
+            evidence/real/2026-09-10/
+            flash-triangle-tested-source.zip
           retention-days: 7
   real-screen-and-fork:
     needs: unit-before-network
