@@ -1,0 +1,60 @@
+name: SMB reconciled candidate verification
+on:
+  push:
+    branches: [income/smb-final-2026-09-10]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Fetch immutable review and upstream sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          git init review
+          git -C review remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          git -C review fetch --depth 1 origin "$GITHUB_SHA"
+          git -C review checkout --detach FETCH_HEAD
+          test "$(git -C review rev-parse HEAD)" = "$GITHUB_SHA"
+          git init target
+          git -C target remote add origin https://github.com/pluralsh/console.git
+          git -C target sparse-checkout init --cone
+          git -C target sparse-checkout set utils/compatibility static
+          git -C target fetch --depth 1 --filter=blob:none origin 66bad0cd9d6b11215a2b35f4672441ec19671320
+          git -C target checkout --detach FETCH_HEAD
+          helm version --short
+          python3 -m venv venv
+          venv/bin/pip install -r target/utils/compatibility/requirements.txt pytest jsonschema
+          venv/bin/python review/smb/fetch_fixtures.py
+          mkdir -p evidence
+      - name: Baseline upstream compatibility suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd target/utils/compatibility
+          ../../../venv/bin/python -m pytest tests -q 2>&1 | tee ../../../evidence/BASELINE_TESTS.txt
+      - name: Targeted suite and full suite with final candidate installed
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp review/smb/scrapers/csi-driver-smb.py target/utils/compatibility/scrapers/
+          cp review/smb/tests/test_csi_driver_smb.py target/utils/compatibility/tests/
+          mkdir -p target/utils/compatibility/tests/fixtures
+          cp -R review/smb/tests/fixtures/csi-driver-smb target/utils/compatibility/tests/fixtures/
+          cd target/utils/compatibility
+          ../../../venv/bin/python -m pytest tests/test_csi_driver_smb.py -q 2>&1 | tee ../../../evidence/TARGETED_TESTS.txt
+          ../../../venv/bin/python -m pytest tests -q 2>&1 | tee ../../../evidence/COMBINED_TESTS.txt
+      - name: Real source retrieval, Plural writer, Helm and strict-YAML failure controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 360 venv/bin/python review/smb/verify.py target evidence 2>&1 | tee evidence/LIVE_LOG.txt
+      - name: Print reproducible result
+        if: always()
+        shell: bash
+        run: |
+          if test -f evidence/LIVE_RESULT.json; then cat evidence/LIVE_RESULT.json; fi
+          if test -f evidence/csi-driver-smb.generated.yaml; then cat evidence/csi-driver-smb.generated.yaml; fi
+          echo 'No Kubernetes deployment, paid API, wallet or financial operation.'
