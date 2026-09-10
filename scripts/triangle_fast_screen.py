@@ -28,20 +28,29 @@ def capture(label,q,checkpoint_dir):
     ranked=sorted(survivors or bounds,key=lambda r:int(r['upper_gross_before_gas_wei']),reverse=True)
     chosen=ranked[:MAX_EXACT] if survivors else ranked[:1]
     values=reader.read([reader.call(t.QUOTER,t.encode_quote(r['tokens'],r['fees'],int(r['amount_in']))) for r in chosen])
-    exact=[]
+    if len(values)!=len(chosen):raise ValueError('QUOTE_RESPONSE_COUNT')
+    exact=[];unavailable=[]
     for r,item in zip(chosen,values):
-        # A missing requested exact quote invalidates this provider; never vote partial state.
+        # Only an explicit RPC execution-revert result may be retained as unavailable.
+        # State failures, transport failures, missing responses and malformed ABI still fail.
+        # No unavailable row gets a price; all complete providers must agree on this set.
+        if item.get('ok') is False and type(item.get('code')) is int and item['code']==3:
+            missing={k:r[k] for k in ('tokens','fees','pools','amount_in')}
+            missing.update(status='QUOTE_REVERTED_UNAVAILABLE',rpc_error_code=3)
+            unavailable.append(missing)
+            continue
         output=t.decode_quote(t.require_result(item));verify_exact(r,int(output['amount_out']))
         fee=t.premium(int(r['amount_in']),bps);gross=int(output['amount_out'])-int(r['amount_in'])-fee
         row={k:r[k] for k in ('tokens','fees','pools','amount_in')}
         row.update(**output,premium_wei=str(fee),gross_before_gas_wei=str(gross),
                    status='POSITIVE_UNVERIFIED' if gross>0 else 'NO_EDGE_BEFORE_GAS')
         row['candidate_id']=t.digest(dict(block_hash=q['header']['hash'],route=row));exact.append(row)
+    if not exact:raise ValueError('NO_VALID_EXACT_QUOTES')
     if t.header(label,q['block_number'])!=q['header']:raise ValueError('BLOCK_CHANGED')
     return dict(pools=pools,excluded=excluded,runtime_hashes=hashes,premium_bps=bps,
-                bound_rows=bounds,exact_rows=exact,route_count=len(bounds),
+                bound_rows=bounds,exact_rows=exact,unavailable_quotes=unavailable,quote_attempt_count=len(chosen),route_count=len(bounds),
                 bound_pruned=sum(r['bound_pruned'] for r in bounds),bound_survivors=len(survivors),
-                unquoted_survivors=max(0,len(survivors)-len(exact)),exact_quote_count=len(exact),
+                unquoted_survivors=max(0,len(survivors)-len(chosen)),unavailable_quote_count=len(unavailable),exact_quote_count=len(exact),
                 diagnostic_quote_without_candidate=not survivors,rpc_state_call_count=reader.count)
 
 
@@ -68,7 +77,8 @@ def projection(report):
            observations=dict(pools=obs['pools'],rows=rows,premium_bps=obs['premium_bps']),requested=len(rows),
            quoted=len(rows),positive_before_gas=sum(int(r['gross_before_gas_wei'])>0 for r in rows),
            matched_fork_selection=t.select_candidates(rows),projection_scope='EXACT_QUOTED_SUBSET_ONLY',
-           bound_screen_sha256=report['sha256'],total_market_coverage=False,exact_arbitrum_fee_known=False)
+           bound_screen_sha256=report['sha256'],excluded_reverted_quotes=obs['unavailable_quote_count'],
+           total_market_coverage=False,exact_arbitrum_fee_known=False)
     p['sha256']=t.digest(p)
     return p
 
@@ -104,7 +114,7 @@ def main():
         positive=sum(int(r['gross_before_gas_wei'])>0 for r in obs['exact_rows'])
         report.update(status='PASS',header=q['header'],block_number=q['block_number'],quorum_sha256=qd,
                       voters=voters,observations=obs,positive_exact_quotes=positive,
-                      decision='UNQUOTED_BOUND_CANDIDATES_REMAIN' if obs['unquoted_survivors'] else
+                      decision='UNRESOLVED_BOUND_CANDIDATES_REMAIN' if obs['unquoted_survivors'] or obs['unavailable_quote_count'] else
                       'EXACT_CANDIDATES_REQUIRE_FORK_AND_FEES' if positive else 'NO_POSITIVE_ROUTE_IN_CAPTURED_SUBSET')
     except Exception as exc:report.update(failure_type=type(exc).__name__,failure_code=safe_code(exc))
     report['finished_at']=dt.datetime.now(dt.timezone.utc).isoformat();report['sha256']=t.digest(report)

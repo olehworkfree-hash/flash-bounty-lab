@@ -62,4 +62,53 @@ class FastScreenTests(unittest.TestCase):
         with patch.object(f,'JournalReader',FakeReader),patch.object(f.t,'discover',return_value=(pools(),[],{},5)),patch.object(f.t,'header',return_value={'hash':'0x'+'b'*64}):
             with self.assertRaisesRegex(ValueError,'BLOCK_CHANGED'):f.capture('publicnode',q,Path('/unused-mock'))
 
+class RevertedQuoteTests(unittest.TestCase):
+    def mixed(self, replacement=None):
+        ps=pools()
+        ps[1]['slot0_raw']='0x'+''.join(uint(x) for x in (2*2**96,0,0,1,1,0,1))
+        q=dict(header={'hash':'0x'+'a'*64},block_number=100,state={'premium_raw':'0x'+uint(5)})
+        candidates=[r for r in bound_routes(ps,5) if not r['bound_pruned']]
+        candidates.sort(key=lambda r:int(r['upper_gross_before_gas_wei']),reverse=True)
+        items=[dict(ok=True,result='0x'+''.join(uint(x) for x in (int(r['upper_bound_out'])-1,128,256,10000,3,2**96,2**96,2**96,3,0,0,0))) for r in candidates]
+        items[0]=dict(ok=False,code=3)
+        if replacement:items=replacement(items)
+        with patch.object(f,'JournalReader',FakeReader),patch.object(f.t,'discover',return_value=(ps,[],{},5)),patch.object(f.t,'header',return_value=q['header']),patch.object(FakeReader,'read',return_value=items):
+            return f.capture('publicnode',q,Path('/unused-mock'))
+    def test_explicit_revert_retains_other_quotes(self):
+        x=self.mixed()
+        self.assertEqual(x['unavailable_quote_count'],1)
+        self.assertEqual(x['exact_quote_count']+1,x['quote_attempt_count'])
+        self.assertEqual(x['unquoted_survivors'],0)
+        self.assertNotIn('amount_out',x['unavailable_quotes'][0])
+        self.assertNotIn('gross_before_gas_wei',x['unavailable_quotes'][0])
+    def test_all_reverted_fail_closed(self):
+        with self.assertRaisesRegex(ValueError,'NO_VALID_EXACT_QUOTES'):
+            self.mixed(lambda rows:[dict(ok=False,code=3) for _ in rows])
+    def test_missing_response_fail_closed(self):
+        with self.assertRaisesRegex(ValueError,'QUOTE_RESPONSE_COUNT'):
+            self.mixed(lambda rows:rows[:-1])
+    def test_rate_limit_error_is_not_execution_revert(self):
+        with self.assertRaisesRegex(ValueError,'REQUIRED_STATE_READ_FAILED'):
+            self.mixed(lambda rows:[dict(ok=False,code=-32005)]+rows[1:])
+    def test_unknown_rpc_error_is_not_execution_revert(self):
+        with self.assertRaisesRegex(ValueError,'REQUIRED_STATE_READ_FAILED'):
+            self.mixed(lambda rows:[dict(ok=False,code=-32000)]+rows[1:])
+    def test_string_revert_code_rejected(self):
+        with self.assertRaisesRegex(ValueError,'REQUIRED_STATE_READ_FAILED'):
+            self.mixed(lambda rows:[dict(ok=False,code='3')]+rows[1:])
+    def test_malformed_success_is_not_dropped(self):
+        with self.assertRaises(ValueError):
+            self.mixed(lambda rows:[dict(ok=True,result='0x')]+rows[1:])
+    def test_revert_set_mismatch_blocks_agreement(self):
+        x=self.mixed();y=copy.deepcopy(x);y['unavailable_quotes'][0]['rpc_error_code']=4
+        with self.assertRaises(ValueError):
+            f.strict_agreement({'publicnode':x,'arbitrum-official':y})
+    def test_projection_contains_only_successes(self):
+        x=self.mixed();r=dict(observations=x,source_commit='a'*40,run_id='1',header={'hash':'0x'+'a'*64},block_number=100,quorum_sha256='b'*64,voters=['publicnode','arbitrum-official'],sha256='c'*64)
+        p=f.projection(r)
+        self.assertEqual(p['excluded_reverted_quotes'],1)
+        self.assertTrue(all('amount_out' in row for row in p['observations']['rows']))
+        self.assertEqual(p['quoted'],x['exact_quote_count'])
+        self.assertFalse(p['execution_allowed'])
+
 if __name__=='__main__':unittest.main()

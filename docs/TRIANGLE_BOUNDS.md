@@ -63,3 +63,14 @@ https://github.com/Uniswap/v3-core/blob/v1.0.0/contracts/libraries/SqrtPriceMath
 https://docs.arbitrum.io/arbitrum-essentials/how-to-estimate-gas
 The bound proof above is our derivation from the standard swap mechanics. Exact
 Arbitrum fees are not inferred from a Quoter gas counter or ordinary Anvil execution.
+
+## Live integration correction (10 September)
+The first published run captured complete pool state but two selected quote calls
+returned explicit JSON-RPC error code 3 from all three providers. Those are not
+missing state reads. The repaired capture records these routes as unavailable,
+without output amounts or profit, while retaining successfully decoded quotes.
+All complete providers must still agree on the entire quote and unavailable set.
+Transport errors, rate limits, other RPC codes, missing responses, malformed ABI,
+state failures and no valid exact quotes remain fatal. An unavailable survivor
+keeps the report unresolved; it is never classified as negative or executable.
+Only successful exact quotes are projected for route-matched fork tests.
