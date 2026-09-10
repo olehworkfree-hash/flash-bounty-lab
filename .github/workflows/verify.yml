@@ -1,7 +1,7 @@
-name: FLASH triangle upper bounds and matched forks
+name: FLASH bounded three-stable scan and matched forks
 on:
   push:
-    branches: [flash/triangle-bounds-2026-09-10]
+    branches: [flash/stable-bounds-2026-09-10]
   workflow_dispatch:
 permissions:
   contents: read
@@ -9,7 +9,7 @@ defaults:
   run:
     shell: bash
 concurrency:
-  group: flash-triangle-bounds-2026-09-10
+  group: flash-stable-bounds-2026-09-10
   cancel-in-progress: true
 jobs:
   unit-before-network:
@@ -35,7 +35,7 @@ jobs:
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
-          name: bounds-unit-evidence
+          name: stable-bounds-unit-evidence
           path: evidence/real/2026-09-10/
           retention-days: 7
   real-screen-and-fork:
@@ -49,30 +49,26 @@ jobs:
       - uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09
         with:
           version: v1.8.1
-      - name: Fresh hash-pinned quorum
-        run: python3 scripts/real_quorum.py --out evidence/real/2026-09-10/quorum.json
-      - name: Bound every triangle and quote the surviving subset
-        run: python3 scripts/triangle_fast_screen.py --quorum evidence/real/2026-09-10/quorum.json --out evidence/real/2026-09-10/fast-screen.json
-      - name: Exact selected triangle in isolated Aave fork
-        run: python3 scripts/run_triangle_fork.py --quorum evidence/real/2026-09-10/quorum.json --screen evidence/real/2026-09-10/matched-selection.json --out-dir evidence/real/2026-09-10/matched
+      - name: Three fresh stable scopes with upper bounds and exact-route Aave forks
+        run: python3 scripts/stable_bounds_session.py --out-dir evidence/real/2026-09-10/stable-bounds
       - name: Atomic V3 regression at captured fresh block
-        run: python3 scripts/run_v3_atomic.py --quorum evidence/real/2026-09-10/quorum.json --out-dir evidence/real/2026-09-10
+        run: python3 scripts/run_v3_atomic.py --quorum evidence/real/2026-09-10/stable-bounds/bridged-dai/quorum.json --out-dir evidence/real/2026-09-10
       - name: V3 quote versus actual local swap regression
-        run: python3 scripts/run_v3_fork.py --quorum evidence/real/2026-09-10/quorum.json --out-dir evidence/real/2026-09-10
+        run: python3 scripts/run_v3_fork.py --quorum evidence/real/2026-09-10/stable-bounds/bridged-dai/quorum.json --out-dir evidence/real/2026-09-10
       - name: Regression - Aave flash loans and V2 profit rejection
         run: bash scripts/run_real_validation.sh swaps
       - name: Regression - captured historical liquidation
         run: bash scripts/run_real_validation.sh liquidation
       - name: Exact source archive
         if: always()
-        run: git archive --format=zip --output=flash-bounds-tested-source.zip HEAD
+        run: git archive --format=zip --output=flash-stable-bounds-tested-source.zip HEAD
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
-          name: bounds-network-evidence
+          name: stable-bounds-network-evidence
           path: |
             evidence/real/2026-09-10/
             evidence/real/2026-09-07/
-            flash-bounds-tested-source.zip
+            flash-stable-bounds-tested-source.zip
           retention-days: 7
           if-no-files-found: error

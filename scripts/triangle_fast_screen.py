@@ -19,11 +19,13 @@ from bounded_screen import JournalReader, atomic_json, run_workers, strict_agree
 MAX_EXACT = 64
 
 
-def capture(label,q,checkpoint_dir):
+def capture(label,q,checkpoint_dir,scope="native-bridged"):
+    if scope not in t.STABLE_CONFIGS:raise ValueError("DISCOVERY_SCOPE")
+    stable_pair=t.STABLE_CONFIGS[scope]
     reader=JournalReader(label,dict(blockHash=q['header']['hash'],requireCanonical=True),directory=checkpoint_dir)
-    pools,excluded,hashes,bps=t.discover(reader)
+    pools,excluded,hashes,bps=t.discover(reader,stable_pair)
     if bps!=t.words(q['state']['premium_raw'],1)[0]:raise ValueError('PREMIUM_DISAGREEMENT')
-    bounds=bound_routes(pools,bps)
+    bounds=bound_routes(pools,bps,stable_pair)
     survivors=[r for r in bounds if not r['bound_pruned']]
     ranked=sorted(survivors or bounds,key=lambda r:int(r['upper_gross_before_gas_wei']),reverse=True)
     chosen=ranked[:MAX_EXACT] if survivors else ranked[:1]
@@ -47,19 +49,19 @@ def capture(label,q,checkpoint_dir):
         row['candidate_id']=t.digest(dict(block_hash=q['header']['hash'],route=row));exact.append(row)
     if not exact:raise ValueError('NO_VALID_EXACT_QUOTES')
     if t.header(label,q['block_number'])!=q['header']:raise ValueError('BLOCK_CHANGED')
-    return dict(pools=pools,excluded=excluded,runtime_hashes=hashes,premium_bps=bps,
+    return dict(scope=scope,stable_pair=list(stable_pair),fee_tiers=list(t.FEES),pools=pools,excluded=excluded,runtime_hashes=hashes,premium_bps=bps,
                 bound_rows=bounds,exact_rows=exact,unavailable_quotes=unavailable,quote_attempt_count=len(chosen),route_count=len(bounds),
                 bound_pruned=sum(r['bound_pruned'] for r in bounds),bound_survivors=len(survivors),
                 unquoted_survivors=max(0,len(survivors)-len(chosen)),unavailable_quote_count=len(unavailable),exact_quote_count=len(exact),
                 diagnostic_quote_without_candidate=not survivors,rpc_state_call_count=reader.count)
 
 
-def worker(label,quorum_path,output,token):
+def worker(label,quorum_path,output,token,scope="native-bridged"):
     result=dict(status='FAILED',provider=label,token=token,execution_allowed=False,realized_pnl='0')
     try:
         original=json.loads(Path(quorum_path).read_text());q,qd=v.validate_quorum(original,time.time())
         if label not in q['state_voters']:raise ValueError('PROVIDER_NOT_IN_QUORUM')
-        data=capture(label,q,Path(output).parent/'batches')
+        data=capture(label,q,Path(output).parent/'batches',scope)
         v.validate_quorum(original,time.time())
         result.update(status='PASS',observation=data,quorum_sha256=qd)
     except Exception as exc:
@@ -74,7 +76,7 @@ def projection(report):
     p=dict(schema='flash.triangle_screen.v1',status='PASS',execution_allowed=False,realized_pnl='0',
            source_commit=report['source_commit'],run_id=report['run_id'],header=report['header'],
            block_number=report['block_number'],quorum_sha256=report['quorum_sha256'],voters=report['voters'],
-           observations=dict(pools=obs['pools'],rows=rows,premium_bps=obs['premium_bps']),requested=len(rows),
+           observations=dict(stable_pair=obs['stable_pair'],fee_tiers=obs['fee_tiers'],pools=obs['pools'],rows=rows,premium_bps=obs['premium_bps']),requested=len(rows),
            quoted=len(rows),positive_before_gas=sum(int(r['gross_before_gas_wei'])>0 for r in rows),
            matched_fork_selection=t.select_candidates(rows),projection_scope='EXACT_QUOTED_SUBSET_ONLY',
            bound_screen_sha256=report['sha256'],excluded_reverted_quotes=obs['unavailable_quote_count'],
@@ -87,8 +89,9 @@ def main():
     ap=argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--quorum',type=Path,required=True);ap.add_argument('--out',type=Path,required=True)
     ap.add_argument('--worker',choices=tuple(v.PROVIDERS));ap.add_argument('--token',default='')
+    ap.add_argument('--scope',choices=tuple(t.STABLE_CONFIGS),default='native-bridged')
     args=ap.parse_args()
-    if args.worker:return worker(args.worker,args.quorum,args.out,args.token)
+    if args.worker:return worker(args.worker,args.quorum,args.out,args.token,args.scope)
     report=dict(schema='flash.triangle_bound_screen.v1',status='FAILED',execution_allowed=False,realized_pnl='0',
                 source_commit=os.getenv('GITHUB_SHA'),run_id=os.getenv('GITHUB_RUN_ID'),
                 exact_arbitrum_fee_known=False,total_market_coverage=False,runtime_hashes_preapproved=False,
@@ -99,7 +102,7 @@ def main():
         original=json.loads(args.quorum.read_text());q,qd=v.validate_quorum(original,time.time())
         root=Path(tempfile.mkdtemp(prefix='triangle-providers-',dir=args.out.parent)).resolve();token=root.name
         commands={label:[sys.executable,str(Path(__file__).resolve()),'--quorum',str(args.quorum.resolve()),
-                         '--out',str(root/label/'result.json'),'--worker',label,'--token',token] for label in q['state_voters']}
+                         '--out',str(root/label/'result.json'),'--worker',label,'--token',token,'--scope',args.scope] for label in q['state_voters']}
         supervisor=run_workers(commands,root,token)
         complete,errors={},{}
         for label,row in supervisor['workers'].items():
@@ -110,7 +113,8 @@ def main():
                       capture_elapsed_seconds=supervisor['elapsed_seconds'],provider_diagnostics_directory=root.name)
         obs,voters=strict_agreement(complete);v.validate_quorum(original,time.time())
         # Recompute every bound independently from the accepted pool-state records.
-        if bound_routes(obs['pools'],obs['premium_bps'])!=obs['bound_rows']:raise ValueError('BOUND_RECALCULATION')
+        if obs['scope']!=args.scope or tuple(obs['stable_pair'])!=t.STABLE_CONFIGS[args.scope]:raise ValueError('WORKER_SCOPE_MISMATCH')
+        if bound_routes(obs['pools'],obs['premium_bps'],t.STABLE_CONFIGS[args.scope])!=obs['bound_rows']:raise ValueError('BOUND_RECALCULATION')
         positive=sum(int(r['gross_before_gas_wei'])>0 for r in obs['exact_rows'])
         report.update(status='PASS',header=q['header'],block_number=q['block_number'],quorum_sha256=qd,
                       voters=voters,observations=obs,positive_exact_quotes=positive,

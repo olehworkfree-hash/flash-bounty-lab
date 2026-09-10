@@ -9,11 +9,14 @@ import os
 from pathlib import Path
 import time
 from market_screen import WETH, USDC, address, words, premium
-from real_quorum import POOL, digest, parallel, agreement, header
+from real_quorum import POOL, DAI, digest, parallel, agreement, header
 from v3_market_screen import (USDCE, FACTORY_V3, QUOTER, ROUTER_V3, FEES, SIZES,
     ZERO, Reader, addr, uint, require_result, validate_quorum)
 
 STABLES = (USDC, USDCE)
+STABLE_CONFIGS = {"native-bridged": STABLES, "native-dai": (USDC, DAI), "bridged-dai": (USDCE, DAI)}
+STABLE_DECIMALS = {USDC: 6, USDCE: 6, DAI: 18}
+BOUNDED_FEES = (100, 500, 3000)
 PAIRS = ((WETH, USDC), (USDC, USDCE), (USDCE, WETH))
 MAX_QUOTES = 512
 
@@ -21,7 +24,7 @@ MAX_QUOTES = 512
 def packed_path(tokens, fees):
     if len(tokens) != 4 or len(fees) != 3 or tokens[0] != WETH or tokens[-1] != WETH:
         raise ValueError('CYCLE_SHAPE')
-    if set(tokens[1:3]) != set(STABLES) or any(type(f) is not int or f not in FEES for f in fees):
+    if (len(set(tokens[1:3])) != 2 or not set(tokens[1:3]) <= set(STABLE_DECIMALS)) or any(type(f) is not int or f not in FEES for f in fees):
         raise ValueError('CYCLE_ALLOWLIST')
     return bytes.fromhex(tokens[0][2:] + ''.join(format(f, '06x') + t[2:] for f, t in zip(fees, tokens[1:])))
 
@@ -45,8 +48,10 @@ def decode_quote(raw):
     return dict(amount_out=str(w[0]), sqrt_prices_after=[str(x) for x in w[5:8]], ticks_crossed=w[9:12])
 
 
-def discover(reader):
-    targets = (WETH, USDC, USDCE, FACTORY_V3, QUOTER, ROUTER_V3, POOL)
+def discover(reader, stable_pair=STABLES, fee_tiers=FEES):
+    if tuple(stable_pair) not in STABLE_CONFIGS.values() or not fee_tiers or any(type(f) is not int or f not in FEES for f in fee_tiers) or len(set(fee_tiers))!=len(fee_tiers):
+        raise ValueError('DISCOVERY_SCOPE')
+    targets = (WETH, *stable_pair, FACTORY_V3, QUOTER, ROUTER_V3, POOL)
     hashes = {}
     for target, item in zip(targets, reader.read([reader.code(x) for x in targets])):
         code = require_result(item)
@@ -56,14 +61,15 @@ def discover(reader):
     checks = reader.read([reader.call(t, '0x313ce567') for t in targets[:3]] +
         [reader.call(t, sig) for t in (QUOTER, ROUTER_V3) for sig in ('0xc45a0155', '0x4aa4a4fc')] +
         [reader.call(POOL, '0x074b2e43')])
-    if [words(require_result(x), 1)[0] for x in checks[:3]] != [18, 6, 6]:
+    if [words(require_result(x), 1)[0] for x in checks[:3]] != [18, *(STABLE_DECIMALS[t] for t in stable_pair)]:
         raise ValueError('DECIMALS')
     if [address(require_result(x)) for x in checks[3:7]] != [FACTORY_V3, WETH] * 2:
         raise ValueError('PERIPHERY_IDENTITY')
     bps = words(require_result(checks[7]), 1)[0]
     if bps > 10000:
         raise ValueError('PREMIUM_RANGE')
-    specs = [dict(tokens=list(pair), fee=f) for pair in PAIRS for f in FEES]
+    pairs = ((WETH,stable_pair[0]), stable_pair, (stable_pair[1],WETH))
+    specs = [dict(tokens=list(pair), fee=f) for pair in pairs for f in fee_tiers]
     calls = [reader.call(FACTORY_V3, '0x1698ee82' + addr(s['tokens'][0]) + addr(s['tokens'][1]) + uint(s['fee'],24)) for s in specs]
     active, excluded = [], []
     for s, item in zip(specs, reader.read(calls)):
@@ -92,9 +98,10 @@ def discover(reader):
     return pools, excluded, hashes, bps
 
 
-def build_routes(pools):
+def build_routes(pools, stable_pair=STABLES):
+    if tuple(stable_pair) not in STABLE_CONFIGS.values(): raise ValueError('STABLE_PAIR_SCOPE')
     routes = []
-    for a, b in (STABLES, STABLES[::-1]):
+    for a, b in (stable_pair, stable_pair[::-1]):
         tokens = [WETH, a, b, WETH]
         legs = [[p for p in pools if set(p['tokens']) == {x,y}] for x,y in zip(tokens,tokens[1:])]
         for selected in itertools.product(*legs):
@@ -108,12 +115,12 @@ def build_routes(pools):
     return routes
 
 
-def capture(label, q):
+def capture(label, q, stable_pair=STABLES, fee_tiers=FEES):
     reader = Reader(label, dict(blockHash=q['header']['hash'], requireCanonical=True))
-    pools, excluded, hashes, bps = discover(reader)
+    pools, excluded, hashes, bps = discover(reader, stable_pair, fee_tiers)
     if bps != words(q['state']['premium_raw'],1)[0]:
         raise ValueError('PREMIUM_DISAGREEMENT')
-    routes = build_routes(pools)
+    routes = build_routes(pools, stable_pair)
     results = reader.read([reader.call(QUOTER, encode_quote(r['tokens'],r['fees'],int(r['amount_in']))) for r in routes])
     rows = []
     for r, item in zip(routes, results):
@@ -128,7 +135,7 @@ def capture(label, q):
         rows.append(row)
     if header(label, q['block_number']) != q['header']:
         raise ValueError('BLOCK_CHANGED')
-    return dict(pools=pools, excluded=excluded, runtime_hashes=hashes, premium_bps=bps,
+    return dict(stable_pair=list(stable_pair), fee_tiers=list(fee_tiers), pools=pools, excluded=excluded, runtime_hashes=hashes, premium_bps=bps,
         rows=rows, rpc_state_call_count=reader.count)
 
 

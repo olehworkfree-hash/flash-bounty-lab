@@ -17,6 +17,8 @@ contract MatchedTriangleForkTest {
     address constant WETH=address(bytes20(hex'82af49447d8a07e3bd95bd0d56f35241523fbab1'));
     address constant USDC=address(bytes20(hex'af88d065e77c8cc2239327c5edb3a432268e5831'));
     address constant USDCE=address(bytes20(hex'ff970a61a04b1ca14834a43f5de4533ebddb5cc8'));
+    address constant DAI=address(bytes20(hex'da10009cbd5d07dd0cecc66161fc93d7c9000da1'));
+    function _stable(address t) private pure returns(bool) { return t==USDC || t==USDCE || t==DAI; }
     address constant FACTORY=address(bytes20(hex'1f98431c8ad98523631ae4a59f267346ea31f984'));
     address constant QUOTER=address(bytes20(hex'61ffe014ba17989e743c5f6cb21bf9697530b21e'));
     address constant ROUTER=address(bytes20(hex'e592427a0aece92de3edee1f18e0157c05861564'));
@@ -29,7 +31,7 @@ contract MatchedTriangleForkTest {
     function _check(uint256 prefund) private {
         require(block.chainid==31337,"LOCAL_FORK_ONLY");
         address a=vm.envAddress("TRI_TOKEN1");address b=vm.envAddress("TRI_TOKEN2");
-        require((a==USDC && b==USDCE)||(a==USDCE && b==USDC),"STABLE_ALLOWLIST");
+        require(a!=b && _stable(a) && _stable(b),"STABLE_ALLOWLIST");
         uint24 f0=uint24(vm.envUint("TRI_FEE0"));uint24 f1=uint24(vm.envUint("TRI_FEE1"));uint24 f2=uint24(vm.envUint("TRI_FEE2"));
         uint256 n=vm.envUint("TRI_AMOUNT");uint256 expected=vm.envUint("TRI_RETURN");
         uint256 expectedFee=vm.envUint("TRI_PREMIUM");

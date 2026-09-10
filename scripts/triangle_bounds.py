@@ -1,10 +1,10 @@
 """Exact rational, optimistic return bounds for fixed, distinct Uniswap V3 pools.
 
 This is a pruning bound, NOT a quote. Only standard exact-input swaps in the
-WETH/USDC/USDC.e allowlist are covered. See docs/TRIANGLE_BOUNDS.md for proof.
+WETH/USDC/USDC.e/DAI allowlist are covered. See docs/TRIANGLE_BOUNDS.md for proof.
 """
 import re
-from triangle_screen import packed_path, build_routes, SIZES, FEES, words, premium
+from triangle_screen import packed_path, build_routes, SIZES, FEES, STABLES, words, premium
 
 Q192 = 2**192
 D = 1_000_000
@@ -49,10 +49,10 @@ def route_bound(route, index):
     return num//den
 
 
-def bound_routes(pools, bps):
+def bound_routes(pools, bps, stable_pair=STABLES):
     need(type(bps) is int and 0<=bps<=10000,'PREMIUM_RANGE')
     index=pool_index(pools);out=[]
-    for r in build_routes(pools):
+    for r in build_routes(pools,stable_pair):
         upper=route_bound(r,index);n=int(r['amount_in']);fee=premium(n,bps)
         out.append(dict(**r,upper_bound_out=str(upper),upper_gross_before_gas_wei=str(upper-n-fee),
                         bound_pruned=upper<=n+fee))
