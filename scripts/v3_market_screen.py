@@ -78,6 +78,10 @@ def decode_batch(body, count):
                 raise ValueError('RPC_ERROR_SHAPE')
             # No provider URLs, arbitrary prose, or raw error data in reports.
             indexed[ident] = {'ok': False, 'code': error['code']}
+            # Preserve only an exact, sanitized computational-limit classification.
+            # A generic -32000 (missing state, backend failure, etc.) is NOT this.
+            if error['code'] == -32000 and isinstance(error.get('message'), str) and error['message'].strip().lower() == 'out of gas':
+                indexed[ident]['error_kind'] = 'OUT_OF_GAS'
         else:
             value = item['result']
             if not isinstance(value, str) or not value.startswith('0x') or len(value)%2:

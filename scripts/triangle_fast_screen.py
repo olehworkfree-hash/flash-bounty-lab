@@ -33,12 +33,13 @@ def capture(label,q,checkpoint_dir,scope="native-bridged"):
     if len(values)!=len(chosen):raise ValueError('QUOTE_RESPONSE_COUNT')
     exact=[];unavailable=[]
     for r,item in zip(chosen,values):
-        # Only an explicit RPC execution-revert result may be retained as unavailable.
-        # State failures, transport failures, missing responses and malformed ABI still fail.
-        # No unavailable row gets a price; all complete providers must agree on this set.
-        if item.get('ok') is False and type(item.get('code')) is int and item['code']==3:
+        # Only explicit quote reverts or a decoded out-of-gas classification are unavailable.
+        # Required state, transport, unknown RPC errors and malformed ABI still fail.
+        # A quote gas cap is not a paid transaction and provides no price or profit.
+        gas_limited = item.get('code') == -32000 and item.get('error_kind') == 'OUT_OF_GAS'
+        if item.get('ok') is False and type(item.get('code')) is int and (item['code']==3 or gas_limited):
             missing={k:r[k] for k in ('tokens','fees','pools','amount_in')}
-            missing.update(status='QUOTE_REVERTED_UNAVAILABLE',rpc_error_code=3)
+            missing.update(status='QUOTE_GAS_LIMIT_UNAVAILABLE' if gas_limited else 'QUOTE_REVERTED_UNAVAILABLE',rpc_error_code=item['code'])
             unavailable.append(missing)
             continue
         output=t.decode_quote(t.require_result(item));verify_exact(r,int(output['amount_out']))
@@ -79,7 +80,9 @@ def projection(report):
            observations=dict(stable_pair=obs['stable_pair'],fee_tiers=obs['fee_tiers'],pools=obs['pools'],rows=rows,premium_bps=obs['premium_bps']),requested=len(rows),
            quoted=len(rows),positive_before_gas=sum(int(r['gross_before_gas_wei'])>0 for r in rows),
            matched_fork_selection=t.select_candidates(rows),projection_scope='EXACT_QUOTED_SUBSET_ONLY',
-           bound_screen_sha256=report['sha256'],excluded_reverted_quotes=obs['unavailable_quote_count'],
+           bound_screen_sha256=report['sha256'],excluded_unavailable_quotes=obs['unavailable_quote_count'],
+           excluded_reverted_quotes=sum(x['rpc_error_code']==3 for x in obs['unavailable_quotes']),
+           excluded_gas_limit_quotes=sum(x['rpc_error_code']==-32000 for x in obs['unavailable_quotes']),
            total_market_coverage=False,exact_arbitrum_fee_known=False)
     p['sha256']=t.digest(p)
     return p

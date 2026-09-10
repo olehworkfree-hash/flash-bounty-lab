@@ -61,7 +61,7 @@ def audit_capture(quorum, report, scope, now):
     for row in obs['unavailable_quotes']:
         key=route_key(row)
         require(key in planned and key not in seen,'CAPTURE_UNAVAILABLE_SET');seen.add(key)
-        require(set(row)=={'tokens','fees','pools','amount_in','status','rpc_error_code'} and row['status']=='QUOTE_REVERTED_UNAVAILABLE' and type(row['rpc_error_code']) is int and row['rpc_error_code']==3,'CAPTURE_UNAVAILABLE_NOT_PRICE')
+        require(set(row)=={'tokens','fees','pools','amount_in','status','rpc_error_code'} and type(row['rpc_error_code']) is int and (row['status'],row['rpc_error_code']) in {('QUOTE_REVERTED_UNAVAILABLE',3),('QUOTE_GAS_LIMIT_UNAVAILABLE',-32000)},'CAPTURE_UNAVAILABLE_NOT_PRICE')
     require(seen==set(planned) and bool(obs['exact_rows']),'CAPTURE_MISSING_QUOTES')
     counts=dict(route_count=len(bounds),bound_pruned=len(bounds)-len(survivors),bound_survivors=len(survivors),
                 quote_attempt_count=len(chosen),exact_quote_count=len(obs['exact_rows']),unavailable_quote_count=len(obs['unavailable_quotes']),
