@@ -1,35 +1,29 @@
-# FLASH verification lab
+# FLASH - bounded triangle research
 
-New AI-assisted, non-production repayment probe, not the earlier private v0.7.0
-source archive or the separate Flint content sample. No earnings are claimed.
+Isolated, AI-assisted research code. No wallet keys, mainnet broadcast, or realized earnings.
 
-## Published core
+This branch combines deadline-supervised RPC capture from commit
+`1b4fe906ef67b6e13053973faf550b7edccc46c5` and route-matched triangle tests from
+`9734ef18054e40029b2e2dfb0db933910f940490` with the prepared optimistic-bound filter.
 
-- src/FlashLoanProbe.sol: repayment receiver limited to chain ID 31337.
-- test/FlashLoanProbe.t.sol: 19 prepared mock Solidity tests.
-- fork-tests/AaveArbitrumFork.t.sol: isolated Aave Arbitrum repayment test.
-- scripts/anvil_smoke.py: starts and stops real loopback Anvil, no transactions.
-- foundry.toml: Solidity 0.8.24, Paris EVM.
-
-## Run
-
-With official Foundry installed:
+## Verification
 
 ```sh
-forge build
-forge test --match-contract FlashLoanProbeTest -vv
-python3 scripts/anvil_smoke.py
+python3 -m unittest discover -s scripts -p 'test_*.py' -v
+forge build --sizes
+FOUNDRY_PROFILE=fork forge build --sizes
+forge test -vvv
 ```
 
-The fork test is separate from default tests. Do not treat default test success
-as evidence of an actual fork, mainnet execution or profit. A local chain ID is
-a guard, not node authentication. No production deployment path is included.
+The first command passed 180 tests locally before publication. Compilation and
+network/fork outcomes for this commit must be read from its actual GitHub Actions
+run; prepared source files alone are not proof of execution.
 
-## Status at publication
+The workflow captures a fresh block, bounds every allowlisted triangle, obtains
+at most 64 exact quotes (one diagnostic quote when all bounds lose), then tests
+selected exact routes in local Anvil. Partial or conflicting full provider results
+are not trading approvals. Historical evidence files retain their original dates.
 
-The preparation container had no forge, solc or anvil. Solidity compilation,
-EVM tests and CI success are not claimed without corresponding actual run logs.
-A separate Python read-only evidence package passed 28 tests locally; those tests
-are not part of this initial core publication and do not execute an EVM.
-The complete new handoff archive is separate; this branch initially contains
-only the published core listed above. No wallet or private keys are used.
+Read `docs/TRIANGLE_BOUNDS.md` for the derivation and limits. A positive bound is
+not an executable quote; a local fork surplus is not money received. Neither full
+Arbitrum transaction fees nor survival on a later block are certified by this code.

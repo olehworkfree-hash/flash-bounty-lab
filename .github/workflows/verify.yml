@@ -1,7 +1,7 @@
-name: FLASH bounded provider deadlines and checkpoints
+name: FLASH triangle upper bounds and matched forks
 on:
   push:
-    branches: [flash/provider-deadlines-2026-09-09]
+    branches: [flash/triangle-bounds-2026-09-10]
   workflow_dispatch:
 permissions:
   contents: read
@@ -9,7 +9,7 @@ defaults:
   run:
     shell: bash
 concurrency:
-  group: flash-provider-deadlines-2026-09-09
+  group: flash-triangle-bounds-2026-09-10
   cancel-in-progress: true
 jobs:
   unit-before-network:
@@ -25,18 +25,18 @@ jobs:
       - name: Compile and test before all network experiments
         run: |
           set -euo pipefail
-          mkdir -p evidence/real/2026-09-09
-          (forge --version; anvil --version; cast --version) | tee evidence/real/2026-09-09/tools.txt
+          mkdir -p evidence/real/2026-09-10
+          (forge --version; anvil --version; cast --version) | tee evidence/real/2026-09-10/tools.txt
           forge build --sizes
           FOUNDRY_PROFILE=fork forge build --sizes
-          python3 -m unittest discover -s scripts -p 'test_*.py' -v 2>&1 | tee evidence/real/2026-09-09/python-tests.log
-          forge test -vvv | tee evidence/real/2026-09-09/unit-tests.log
+          python3 -m unittest discover -s scripts -p 'test_*.py' -v 2>&1 | tee evidence/real/2026-09-10/python-tests.log
+          forge test -vvv | tee evidence/real/2026-09-10/unit-tests.log
           python3 scripts/anvil_smoke.py
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
-          name: deadline-unit-evidence
-          path: evidence/real/2026-09-09/
+          name: bounds-unit-evidence
+          path: evidence/real/2026-09-10/
           retention-days: 7
   real-screen-and-fork:
     needs: unit-before-network
@@ -49,26 +49,30 @@ jobs:
       - uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09
         with:
           version: v1.8.1
-      - name: Three bounded observations with new quorum each round
-        run: python3 scripts/session_screen.py --out-dir evidence/real/2026-09-09/session --rounds 3
-      - name: Aave flash loan and V3 swaps in one guarded local operation
-        run: python3 scripts/run_v3_atomic.py --quorum evidence/real/2026-09-09/session/round-3/quorum.json --out-dir evidence/real/2026-09-09
-      - name: Independent V3 quote versus actual swap regression
-        run: python3 scripts/run_v3_fork.py --quorum evidence/real/2026-09-09/session/round-3/quorum.json --out-dir evidence/real/2026-09-09
+      - name: Fresh hash-pinned quorum
+        run: python3 scripts/real_quorum.py --out evidence/real/2026-09-10/quorum.json
+      - name: Bound every triangle and quote the surviving subset
+        run: python3 scripts/triangle_fast_screen.py --quorum evidence/real/2026-09-10/quorum.json --out evidence/real/2026-09-10/fast-screen.json
+      - name: Exact selected triangle in isolated Aave fork
+        run: python3 scripts/run_triangle_fork.py --quorum evidence/real/2026-09-10/quorum.json --screen evidence/real/2026-09-10/matched-selection.json --out-dir evidence/real/2026-09-10/matched
+      - name: Atomic V3 regression at captured fresh block
+        run: python3 scripts/run_v3_atomic.py --quorum evidence/real/2026-09-10/quorum.json --out-dir evidence/real/2026-09-10
+      - name: V3 quote versus actual local swap regression
+        run: python3 scripts/run_v3_fork.py --quorum evidence/real/2026-09-10/quorum.json --out-dir evidence/real/2026-09-10
       - name: Regression - Aave flash loans and V2 profit rejection
         run: bash scripts/run_real_validation.sh swaps
       - name: Regression - captured historical liquidation
         run: bash scripts/run_real_validation.sh liquidation
       - name: Exact source archive
         if: always()
-        run: git archive --format=zip --output=flash-deadline-tested-source.zip HEAD
+        run: git archive --format=zip --output=flash-bounds-tested-source.zip HEAD
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
-          name: deadline-network-evidence
+          name: bounds-network-evidence
           path: |
-            evidence/real/2026-09-09/
+            evidence/real/2026-09-10/
             evidence/real/2026-09-07/
-            flash-deadline-tested-source.zip
+            flash-bounds-tested-source.zip
           retention-days: 7
           if-no-files-found: error
