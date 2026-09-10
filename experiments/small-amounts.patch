@@ -1,0 +1,324 @@
+diff --git a/docs/TRIANGLE_SMALL_AMOUNTS.md b/docs/TRIANGLE_SMALL_AMOUNTS.md
+new file mode 100644
+index 0000000..9a37647
+--- /dev/null
++++ b/docs/TRIANGLE_SMALL_AMOUNTS.md
+@@ -0,0 +1,34 @@
++# Small-amount triangle experiment — 2026-09-10
++
++Parent: 7abaae9902dc0b7d7579c66795885fada6e85a43, successful run 34476200641.
++
++The parent checked 0.001, 0.01, 0.1 and 1 WETH. Four route families had
++positive marginal bounds, but all fourteen successful quotes were negative;
++two 1-WETH calls reverted. That is not proof about smaller amounts.
++
++This experiment adds 0.000001, 0.00001, 0.00005, 0.0001, 0.0002 and
++0.0005 WETH. The maximum number of discrete route/amount combinations is
++1280 (two directions, four fee choices per leg, ten amounts). These are
++sample points, not a continuous optimum or a proof about every loan size.
++
++At most 64 exact Quoter calls per provider remain allowed after bound pruning.
++Unquoted or reverted candidates remain explicitly unresolved. Pool allowlists,
++EIP-1898 block hashes, source/evidence checksums, two-provider state agreement,
++local chain ID 31337, treasury accounting, baseline preservation, and the ban
++on signing/broadcasting public transactions are unchanged.
++
++Every size is a multiple of 10000 base units; multiplying by any integer-bps
++premium is exact. This does not establish that every future Aave deployment
++uses the same rounding rule for arbitrary sizes.
++
++The source-level Python and Solidity allowlists are tested for agreement.
++The matched-fork harness uses the same ten-size allowlist and executes only
++screen-selected candidates (maximum three), with zero prefund and local
++prefund preservation tests. Other quotes are not fork-verified automatically.
++
++Gross surplus, if any, is before the full Arbitrum execution and data fee.
++The harness sets a one-wei gas-budget placeholder solely to test the economic
++repayment threshold. This is NOT a real fee estimate; no live execution is
++allowed and no simulated surplus is recorded as earnings.
++
++Background: https://docs.arbitrum.io/arbitrum-essentials/how-to-estimate-gas
+diff --git a/fork-tests/MatchedTriangleFork.t.sol b/fork-tests/MatchedTriangleFork.t.sol
+index 967cf57..ce49b51 100644
+--- a/fork-tests/MatchedTriangleFork.t.sol
++++ b/fork-tests/MatchedTriangleFork.t.sol
+@@ -2,6 +2,7 @@
+ pragma solidity 0.8.24;
+ import {ForkV3Adapter} from "../src/ForkV3Adapter.sol";
+ import {ForkV3ReturnAdapter} from "../src/ForkV3ReturnAdapter.sol";
++import {TriangleAmounts} from "../src/TriangleAmounts.sol";
+ import {ForkProfitExecutor} from "../src/ForkProfitExecutor.sol";
+ import {TokenV3,FactoryV3,QuoterV3} from "./V3QuoteExecutionFork.t.sol";
+ import {AtomicToken,AtomicAave} from "./V3AtomicFork.t.sol";
+@@ -33,7 +34,7 @@ contract MatchedTriangleForkTest {
+         uint24 f0=uint24(vm.envUint("TRI_FEE0"));uint24 f1=uint24(vm.envUint("TRI_FEE1"));uint24 f2=uint24(vm.envUint("TRI_FEE2"));
+         uint256 n=vm.envUint("TRI_AMOUNT");uint256 expected=vm.envUint("TRI_RETURN");
+         uint256 expectedFee=vm.envUint("TRI_PREMIUM");
+-        require(n==0.001 ether || n==0.01 ether || n==0.1 ether || n==1 ether,"AMOUNT_ALLOWLIST");
++        require(TriangleAmounts.allowed(n),"AMOUNT_ALLOWLIST");
+         bytes memory fullPath=abi.encodePacked(WETH,f0,a,f1,b,f2,WETH);
+         (uint256 back,,,)=IMultiQuote(QUOTER).quoteExactInput(fullPath,n);
+         require(back==expected,"SCREEN_QUOTE_MISMATCH");
+diff --git a/scripts/run_triangle_fork.py b/scripts/run_triangle_fork.py
+index 9afabdf..1dbaa6b 100644
+--- a/scripts/run_triangle_fork.py
++++ b/scripts/run_triangle_fork.py
+@@ -9,7 +9,7 @@ import time
+ from real_quorum import PROVIDERS, digest
+ from market_screen import premium, words
+ from v3_market_screen import validate_quorum
+-from triangle_screen import packed_path, SIZES, select_candidates
++from triangle_screen import packed_path, SIZES, MAX_QUOTES, select_candidates
+ from run_v3_atomic import local
+ 
+ 
+@@ -46,7 +46,7 @@ def validate_selection(quorum, screen, now):
+             if out<=0 or int(r['premium_wei'])!=fee or int(r['gross_before_gas_wei'])!=out-amount-fee:
+                 raise ValueError('QUOTE_ARITHMETIC')
+             valid.append(row)
+-    if not 0<len(rows)<=512 or len(rows)!=s['requested'] or len(valid)!=s['quoted'] or sum(int(r['gross_before_gas_wei'])>0 for r in valid)!=s['positive_before_gas']:
++    if not 0<len(rows)<=MAX_QUOTES or len(rows)!=s['requested'] or len(valid)!=s['quoted'] or sum(int(r['gross_before_gas_wei'])>0 for r in valid)!=s['positive_before_gas']:
+         raise ValueError('SCREEN_COUNTS')
+     selected=select_candidates(rows)
+     if s.get('matched_fork_selection')!=selected:
+diff --git a/scripts/test_triangle.py b/scripts/test_triangle.py
+index 82dd10f..2af3cda 100644
+--- a/scripts/test_triangle.py
++++ b/scripts/test_triangle.py
+@@ -54,7 +54,7 @@ class TriangleTest(unittest.TestCase):
+             with self.assertRaises(ValueError):decode_quote('0x'+''.join(uint(x) for x in raw))
+     def test_extra_bytes_rejected(self):
+         with self.assertRaises(ValueError):decode_quote(quote_raw()+'00'*32)
+-    def test_full_route_count(self):self.assertEqual(len(build_routes(mock_pools())),512)
++    def test_full_route_count(self):self.assertEqual(len(build_routes(mock_pools())),2*len(FEES)**3*len(SIZES))
+     def test_distinct_pools_each_route(self):
+         for r in build_routes(mock_pools()):self.assertEqual(len(set(r['pools'])),3)
+     def test_duplicate_pool_rejected(self):
+diff --git a/scripts/test_triangle_amounts.py b/scripts/test_triangle_amounts.py
+new file mode 100644
+index 0000000..e662784
+--- /dev/null
++++ b/scripts/test_triangle_amounts.py
+@@ -0,0 +1,60 @@
++import copy
++from pathlib import Path
++import re
++import unittest
++from triangle_amounts import LEGACY_SIZES, MICRO_SIZES, SIZES, MAX_ROUTES, SIZING_SCOPE
++from triangle_screen import encode_quote, words, WETH, USDC, USDCE, build_routes, premium, digest
++from test_triangle import mock_pools, fixture, seal
++from run_triangle_fork import validate_selection
++from triangle_bounds import bound_routes
++from test_triangle_bounds import pools
++
++class TriangleAmountTests(unittest.TestCase):
++    def test_exact_ten_sorted_unique(self):
++        self.assertEqual(len(SIZES),10)
++        self.assertEqual(SIZES,tuple(sorted(set(SIZES))))
++    def test_legacy_sizes_preserved(self):
++        self.assertEqual(LEGACY_SIZES,(10**15,10**16,10**17,10**18))
++        self.assertTrue(set(LEGACY_SIZES)<=set(SIZES))
++    def test_micro_smaller_not_zero(self):
++        self.assertTrue(all(0 < n < min(LEGACY_SIZES) for n in MICRO_SIZES))
++    def test_all_amounts_have_exact_bps_premium(self):
++        for n in SIZES:
++            for bps in (0,1,5,17,9999,10000):
++                self.assertEqual(n*bps%10000,0)
++                self.assertEqual(premium(n,bps),n*bps//10000)
++    def test_all_amounts_encode_exactly(self):
++        for n in SIZES:
++            raw=bytes.fromhex(encode_quote([WETH,USDC,USDCE,WETH],[100,500,3000],n)[2:])
++            self.assertEqual(int.from_bytes(raw[36:68],'big'),n)
++    def test_unlisted_and_bad_types_rejected(self):
++        for n in (True,False,'1000000000000',1e12,0,1,-1,10**18+1,10**12-1):
++            with self.assertRaises(ValueError):
++                encode_quote([WETH,USDC,USDCE,WETH],[100,500,3000],n)
++    def test_complete_discrete_grid_count(self):
++        rows=build_routes(mock_pools())
++        self.assertEqual(len(rows),1280)
++        self.assertEqual(MAX_ROUTES,1280)
++        self.assertEqual({int(r['amount_in']) for r in rows},set(SIZES))
++    def test_solidity_python_allowlists_agree(self):
++        text=(Path(__file__).resolve().parents[1]/'src/TriangleAmounts.sol').read_text()
++        solidity={int(a)*10**int(b) for a,b in re.findall(r'n == (\d+)e(\d+)',text)}
++        self.assertEqual(solidity,set(SIZES))
++    def test_bounds_cover_all_twenty_mock_routes(self):
++        rows=bound_routes(pools(),5)
++        self.assertEqual(len(rows),20)
++        self.assertTrue(all(r['bound_pruned'] for r in rows))
++    def test_fork_selection_accepts_each_micro_amount(self):
++        for n in MICRO_SIZES:
++            q,s=fixture();r=s['observations']['rows'][0]
++            r.update(amount_in=str(n),amount_out=str(n-1),premium_wei=str(premium(n,5)),gross_before_gas_wei=str(-1-premium(n,5)))
++            r.pop('candidate_id');r['candidate_id']=digest(dict(block_hash=q['header']['hash'],route=r))
++            s['matched_fork_selection']=[copy.deepcopy(r)];seal(s)
++            self.assertEqual(validate_selection(q,s,1001)[3][0]['amount_in'],str(n))
++    def test_scope_does_not_claim_continuous_optimization(self):
++        self.assertEqual(SIZING_SCOPE,'TEN_DISCRETE_AMOUNTS_NOT_ALL_AMOUNTS')
++    def test_two_hop_v3_grid_not_silently_changed(self):
++        import v3_market_screen as v
++        self.assertEqual(tuple(v.SIZES),LEGACY_SIZES)
++
++if __name__=='__main__':unittest.main()
+diff --git a/scripts/test_triangle_bounds.py b/scripts/test_triangle_bounds.py
+index c554a32..63c45d1 100644
+--- a/scripts/test_triangle_bounds.py
++++ b/scripts/test_triangle_bounds.py
+@@ -2,7 +2,7 @@ import copy
+ from fractions import Fraction
+ import random
+ import unittest
+-from triangle_screen import WETH,USDC,USDCE,PAIRS,uint,build_routes
++from triangle_screen import WETH,USDC,USDCE,PAIRS,uint,build_routes,SIZES
+ from triangle_bounds import pool_index,route_bound,bound_routes,verify_exact
+ 
+ Q=2**96
+@@ -27,7 +27,7 @@ def single_range_reference(amount,s,L,zero,fee):
+ class TriangleBoundTest(unittest.TestCase):
+     def test_equal_prices_always_lose_fees(self):
+         rows=bound_routes(pools(),5)
+-        self.assertEqual(len(rows),8)
++        self.assertEqual(len(rows),2*len(SIZES))
+         self.assertTrue(all(r['bound_pruned'] for r in rows))
+     def test_positive_upper_is_not_pruned(self):
+         ps=pools();ps[1]['slot0_raw']='0x'+''.join(uint(x) for x in (Q*2,0,0,1,1,0,1))
+diff --git a/scripts/test_triangle_fast_screen.py b/scripts/test_triangle_fast_screen.py
+index 23914a1..2419059 100644
+--- a/scripts/test_triangle_fast_screen.py
++++ b/scripts/test_triangle_fast_screen.py
+@@ -7,7 +7,7 @@ from unittest.mock import patch
+ import triangle_fast_screen as f
+ from triangle_bounds import bound_routes
+ from test_triangle_bounds import pools
+-from triangle_screen import digest,uint,encode_quote
++from triangle_screen import digest,uint,encode_quote,SIZES
+ 
+ class FakeReader:
+     def __init__(self,*args,**kwargs):self.count=0
+@@ -27,10 +27,10 @@ class FastScreenTests(unittest.TestCase):
+         with patch.object(f,'JournalReader',FakeReader),patch.object(f.t,'discover',return_value=(pools(),[],{},5)),patch.object(f.t,'header',return_value=q['header']):
+             return f.capture('publicnode',q,Path('/unused-mock'))
+     def test_all_negative_get_one_diagnostic(self):
+-        x=self.captured();self.assertEqual(x['route_count'],8);self.assertEqual(x['exact_quote_count'],1)
+-        self.assertEqual(x['bound_pruned'],8);self.assertTrue(x['diagnostic_quote_without_candidate'])
++        x=self.captured();self.assertEqual(x['route_count'],2*len(SIZES));self.assertEqual(x['exact_quote_count'],1)
++        self.assertEqual(x['bound_pruned'],2*len(SIZES));self.assertTrue(x['diagnostic_quote_without_candidate'])
+     def test_all_bounds_retained(self):
+-        x=self.captured();self.assertEqual(len(x['bound_rows']),8)
++        x=self.captured();self.assertEqual(len(x['bound_rows']),2*len(SIZES))
+     def test_projection_cannot_present_bounds_as_quotes(self):
+         x=self.captured();r=dict(observations=x,source_commit='a'*40,run_id='1',header={'hash':'0x'+'a'*64},
+                                 block_number=100,quorum_sha256='b'*64,voters=['publicnode','arbitrum-official'],sha256='c'*64)
+diff --git a/scripts/triangle_amounts.py b/scripts/triangle_amounts.py
+new file mode 100644
+index 0000000..a56dc1d
+--- /dev/null
++++ b/scripts/triangle_amounts.py
+@@ -0,0 +1,11 @@
++"""Finite research-only triangle sizing; all sizes are WETH base units.
++
++The four legacy amounts are retained; six sub-grid probes are added. This is
++not an optimizer, a continuous-amount bound, or an execution authorization.
++Each amount is divisible by 10_000 so integer-bps flash premiums are exact.
++"""
++LEGACY_SIZES = (10**15, 10**16, 10**17, 10**18)
++MICRO_SIZES = (10**12, 10**13, 5*10**13, 10**14, 2*10**14, 5*10**14)
++SIZES = tuple(sorted(LEGACY_SIZES + MICRO_SIZES))
++MAX_ROUTES = 2 * 4**3 * len(SIZES)
++SIZING_SCOPE = 'TEN_DISCRETE_AMOUNTS_NOT_ALL_AMOUNTS'
+diff --git a/scripts/triangle_fast_screen.py b/scripts/triangle_fast_screen.py
+index d8703dd..cc789d6 100644
+--- a/scripts/triangle_fast_screen.py
++++ b/scripts/triangle_fast_screen.py
+@@ -49,6 +49,7 @@ def capture(label,q,checkpoint_dir):
+     if t.header(label,q['block_number'])!=q['header']:raise ValueError('BLOCK_CHANGED')
+     return dict(pools=pools,excluded=excluded,runtime_hashes=hashes,premium_bps=bps,
+                 bound_rows=bounds,exact_rows=exact,unavailable_quotes=unavailable,quote_attempt_count=len(chosen),route_count=len(bounds),
++                amount_grid_wei=[str(n) for n in t.SIZES],sizing_scope=t.SIZING_SCOPE,
+                 bound_pruned=sum(r['bound_pruned'] for r in bounds),bound_survivors=len(survivors),
+                 unquoted_survivors=max(0,len(survivors)-len(chosen)),unavailable_quote_count=len(unavailable),exact_quote_count=len(exact),
+                 diagnostic_quote_without_candidate=not survivors,rpc_state_call_count=reader.count)
+@@ -78,7 +79,8 @@ def projection(report):
+            quoted=len(rows),positive_before_gas=sum(int(r['gross_before_gas_wei'])>0 for r in rows),
+            matched_fork_selection=t.select_candidates(rows),projection_scope='EXACT_QUOTED_SUBSET_ONLY',
+            bound_screen_sha256=report['sha256'],excluded_reverted_quotes=obs['unavailable_quote_count'],
+-           total_market_coverage=False,exact_arbitrum_fee_known=False)
++           total_market_coverage=False,exact_arbitrum_fee_known=False,
++           amount_grid_wei=obs['amount_grid_wei'],sizing_scope=obs['sizing_scope'])
+     p['sha256']=t.digest(p)
+     return p
+ 
+diff --git a/scripts/triangle_screen.py b/scripts/triangle_screen.py
+index 2874583..c5498e3 100644
+--- a/scripts/triangle_screen.py
++++ b/scripts/triangle_screen.py
+@@ -10,12 +10,14 @@ from pathlib import Path
+ import time
+ from market_screen import WETH, USDC, address, words, premium
+ from real_quorum import POOL, digest, parallel, agreement, header
+-from v3_market_screen import (USDCE, FACTORY_V3, QUOTER, ROUTER_V3, FEES, SIZES,
++from v3_market_screen import (USDCE, FACTORY_V3, QUOTER, ROUTER_V3, FEES,
+     ZERO, Reader, addr, uint, require_result, validate_quorum)
+ 
++from triangle_amounts import SIZES, MAX_ROUTES, SIZING_SCOPE
++
+ STABLES = (USDC, USDCE)
+ PAIRS = ((WETH, USDC), (USDC, USDCE), (USDCE, WETH))
+-MAX_QUOTES = 512
++MAX_QUOTES = MAX_ROUTES
+ 
+ 
+ def packed_path(tokens, fees):
+diff --git a/src/TriangleAmounts.sol b/src/TriangleAmounts.sol
+new file mode 100644
+index 0000000..d821f6b
+--- /dev/null
++++ b/src/TriangleAmounts.sol
+@@ -0,0 +1,11 @@
++// SPDX-License-Identifier: MIT
++pragma solidity 0.8.24;
++
++/// @notice Discrete local-fork test amounts. Not an on-chain risk policy.
++library TriangleAmounts {
++    function allowed(uint256 n) internal pure returns (bool) {
++        return n == 1e12 || n == 1e13 || n == 5e13 || n == 1e14
++            || n == 2e14 || n == 5e14 || n == 1e15 || n == 1e16
++            || n == 1e17 || n == 1e18;
++    }
++}
+diff --git a/test/TriangleAmounts.t.sol b/test/TriangleAmounts.t.sol
+new file mode 100644
+index 0000000..ac89d7e
+--- /dev/null
++++ b/test/TriangleAmounts.t.sol
+@@ -0,0 +1,30 @@
++// SPDX-License-Identifier: MIT
++pragma solidity 0.8.24;
++import {TriangleAmounts} from "../src/TriangleAmounts.sol";
++
++contract TriangleAmountsTest {
++    function testAllTenAmounts() public pure {
++        uint256[10] memory sizes = [uint256(1e12),1e13,5e13,1e14,2e14,5e14,1e15,1e16,1e17,1e18];
++        for (uint256 i; i < sizes.length; ++i) {
++            require(TriangleAmounts.allowed(sizes[i]),"ALLOWLIST");
++            require(sizes[i] % 10000 == 0,"EXACT_PREMIUM");
++        }
++    }
++    function testZeroAndHugeDenied() public pure {
++        require(!TriangleAmounts.allowed(0));
++        require(!TriangleAmounts.allowed(type(uint256).max));
++        require(!TriangleAmounts.allowed(1e18+1));
++    }
++    function testNeighboursDenied() public pure {
++        uint256[10] memory sizes = [uint256(1e12),1e13,5e13,1e14,2e14,5e14,1e15,1e16,1e17,1e18];
++        for (uint256 i; i < sizes.length; ++i) {
++            require(!TriangleAmounts.allowed(sizes[i]-1));
++            require(!TriangleAmounts.allowed(sizes[i]+1));
++        }
++    }
++    function testFuzzAcceptedAmountsStayBounded(uint256 n) public pure {
++        if (TriangleAmounts.allowed(n)) {
++            require(n >= 1e12 && n <= 1e18 && n % 10000 == 0);
++        }
++    }
++}

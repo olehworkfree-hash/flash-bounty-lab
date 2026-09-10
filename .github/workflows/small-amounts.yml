@@ -1,0 +1,79 @@
+name: FLASH small-amount triangle experiment
+on:
+  push:
+    branches: [flash/triangle-small-amounts-2026-09-10]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: flash-small-amounts-2026-09-10
+  cancel-in-progress: true
+defaults:
+  run:
+    shell: bash
+jobs:
+  unit-before-network:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09
+        with:
+          version: v1.8.1
+      - name: Materialize only the exact locally reviewed source tree
+        run: bash experiments/materialize-small-amounts.sh
+      - name: Compile Solidity and run all tests before network experiments
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/flash-small-source"
+          (forge --version; anvil --version; cast --version) | tee evidence/small/tools.txt
+          forge build --sizes
+          FOUNDRY_PROFILE=fork forge build --sizes
+          python3 -m unittest discover -s scripts -p 'test_*.py' -v 2>&1 | tee evidence/small/python-tests.log
+          forge test -vvv | tee evidence/small/solidity-tests.log
+          python3 scripts/anvil_smoke.py
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: small-amount-unit-evidence
+          path: ${{ runner.temp }}/flash-small-source/evidence/small/
+          retention-days: 7
+  fresh-quorum-and-matched-fork:
+    needs: unit-before-network
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09
+        with:
+          version: v1.8.1
+      - name: Materialize the same content-addressed source
+        run: bash experiments/materialize-small-amounts.sh
+      - name: Fresh public RPC quorum and bounded discrete small-amount scan
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/flash-small-source"
+          python3 scripts/real_quorum.py --out evidence/small/quorum.json
+          python3 scripts/triangle_fast_screen.py --quorum evidence/small/quorum.json --out evidence/small/fast-screen.json
+      - name: Execute only exact selected candidates in isolated Anvil
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/flash-small-source"
+          python3 scripts/run_triangle_fork.py --quorum evidence/small/quorum.json --screen evidence/small/matched-selection.json --out-dir evidence/small/matched
+      - name: Existing atomic V3 regression on the same captured block
+        run: |
+          cd "$RUNNER_TEMP/flash-small-source"
+          python3 scripts/run_v3_atomic.py --quorum evidence/small/quorum.json --out-dir evidence/small
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: small-amount-network-evidence
+          path: ${{ runner.temp }}/flash-small-source/evidence/small/
+          retention-days: 7
+          if-no-files-found: error
